@@ -56,6 +56,128 @@ export default function App() {
     'Experiencia del Cliente'
   ]);
 
+  // --- Estados de Turnos y Calendarios Levantados ---
+  const ANCHOR = '2026-07-01';
+  const DAY_MS = 86400000;
+  const [scheduleCatalog, setScheduleCatalog] = useState([
+    {
+      id: 'SCH-FIJO-01', code: 'DF1', name: 'Diurno General Corporativo', type: 'FIJO',
+      startTime: '08:00', endTime: '17:00',
+      checkInStart: '07:00', checkInEnd: '09:30', checkOutStart: '16:30', checkOutEnd: '20:00',
+      gracePeriod: 10, otThreshold: 15, otEarly: false, otLate: true, otBase: 'TRABAJADO',
+      crossDay: false, daySpan: 1, validatePunch: true, dupMinutes: 5, dayChange: '00:00',
+      breakType: 'AUTOMATICO', breakDuration: 60,
+      bg: 'bg-blue-100 text-blue-800 border-blue-200'
+    },
+    {
+      id: 'SCH-FLEX-02', code: 'FLX', name: 'Flexible TI / Soporte', type: 'FLEXIBLE',
+      startTime: 'Flexible', endTime: 'Flexible', targetHours: 8.5, multiPunch: true,
+      gracePeriod: 0, otThreshold: 30, otBase: 'EXTRA',
+      crossDay: false, daySpan: 1, validatePunch: false, dupMinutes: 5, dayChange: '00:00',
+      breakType: 'REGISTRADO', breakDuration: 45,
+      bg: 'bg-purple-100 text-purple-800 border-purple-200'
+    },
+    {
+      id: 'SCH-NOC-03', code: 'NOC', name: 'Nocturno Rotativo Carga (+1)', type: 'NOCTURNO',
+      startTime: '22:00', endTime: '06:00',
+      checkInStart: '21:00', checkInEnd: '23:30', checkOutStart: '05:30', checkOutEnd: '08:00',
+      gracePeriod: 15, otThreshold: 20, otEarly: false, otLate: true, otBase: 'TRABAJADO',
+      crossDay: true, daySpan: 1, validatePunch: true, dupMinutes: 5, dayChange: '04:00',
+      breakType: 'AUTOMATICO', breakDuration: 30,
+      bg: 'bg-slate-800 text-white border-slate-700'
+    },
+    {
+      id: 'SCH-EXT-04', code: 'G24', name: 'Jornada Extensa Guardia', type: 'EXTENSO',
+      startTime: '08:00', endTime: '08:00', durationHours: 24,
+      gracePeriod: 15, otThreshold: 30, otBase: 'TRABAJADO',
+      crossDay: true, daySpan: 2, validatePunch: true, dupMinutes: 10, dayChange: '00:00',
+      breakType: 'AUTOMATICO', breakDuration: 120,
+      bg: 'bg-amber-100 text-amber-800 border-amber-200'
+    },
+    {
+      id: 'SCH-DESC-05', code: 'LIB', name: 'Día Libre (Descanso)', type: 'DESCANSO',
+      startTime: 'N/A', endTime: 'N/A', otMultiplier: 2.0,
+      bg: 'bg-slate-100 text-slate-400 border-slate-200'
+    }
+  ]);
+
+  const [shiftCycles, setShiftCycles] = useState([
+    {
+      id: 'CYC-SEM-01', name: 'Semanal Administrativo Estándar', type: 'SEMANAL', auto: false,
+      days: ['DF1', 'DF1', 'DF1', 'DF1', 'DF1', 'LIB', 'LIB'],
+      desc: 'Lunes a Viernes Diurno, Sábado y Domingo Libres'
+    },
+    {
+      id: 'CYC-ROT-02', name: 'Rotativo Vigilancia 12x24', type: 'CUSTOM', auto: false,
+      days: ['DF1', 'LIB', 'NOC', 'LIB'],
+      desc: 'Diurno → Libre → Nocturno → Libre (ciclo continuo de 4 días)'
+    },
+    {
+      id: 'CYC-ROT-03', name: 'Guardia Médica 24x48', type: 'CUSTOM', auto: false,
+      days: ['G24', 'LIB', 'LIB'],
+      desc: 'Guardia 24 horas + 48 horas de descanso continuo'
+    },
+    {
+      id: 'CYC-AUTO-04', name: 'Multi-turno Automático (IA)', type: 'AUTO', auto: true,
+      days: [],
+      desc: 'El sistema detecta el turno (Diurno/Vespertino/Nocturno) según la hora del marcaje'
+    }
+  ]);
+
+  const [assignments, setAssignments] = useState([
+    { id: 'ASG-OPS', mode: 'DEPARTAMENTO', target: 'Operaciones', cycleId: 'CYC-ROT-02', startDate: ANCHOR, endDate: '2026-07-31', isTemp: false, phase: 0, pub: { mode: 'PERIODICA', cadence: 'SEMANAL', noticeDay: 5, lead: 1 } },
+    { id: 'ASG-LOG', mode: 'DEPARTAMENTO', target: 'Logística', cycleId: 'CYC-ROT-02', startDate: ANCHOR, endDate: '2026-07-31', isTemp: false, phase: 1, pub: { mode: 'PERIODICA', cadence: 'QUINCENAL', noticeDay: 4, lead: 1 } },
+    { id: 'ASG-TI', mode: 'DEPARTAMENTO', target: 'TI y Sistemas', cycleId: 'CYC-SEM-01', startDate: ANCHOR, endDate: '2026-07-31', isTemp: false, phase: 0, pub: { mode: 'NINGUNA' } },
+    { id: 'ASG-RH', mode: 'DEPARTAMENTO', target: 'Recursos Humanos', cycleId: 'CYC-SEM-01', startDate: ANCHOR, endDate: '2026-07-31', isTemp: false, phase: 0, pub: { mode: 'NINGUNA' } },
+    { id: 'ASG-LUCIA', mode: 'EMPLEADO', target: 'Lucía Fernández', cycleId: 'CYC-ROT-03', startDate: ANCHOR, endDate: '2026-07-31', isTemp: false, phase: 0, pub: { mode: 'PERIODICA', cadence: 'MENSUAL', noticeDay: 1, lead: 1 } },
+    { id: 'EXC-MARIA', mode: 'EMPLEADO', target: 'María Gómez', shiftCode: 'G24', startDate: '2026-07-05', endDate: '2026-07-05', isTemp: true, exceptionType: 'REEMPLAZAR' }
+  ]);
+
+  const [manualOverrides, setManualOverrides] = useState({});
+  const [periodOverrides, setPeriodOverrides] = useState({});
+
+  const dateIndex = (ds) =>
+    Math.round((new Date(ds + 'T00:00:00') - new Date(ANCHOR + 'T00:00:00')) / DAY_MS);
+
+  const resolveAssignment = (empName, dept, ds) => {
+    const inRange = (a) => ds >= a.startDate && ds <= a.endDate;
+    return (
+      assignments.find((a) => a.isTemp && a.mode === 'EMPLEADO' && a.target === empName && inRange(a)) ||
+      assignments.find((a) => !a.isTemp && a.mode === 'EMPLEADO' && a.target === empName && inRange(a)) ||
+      assignments.find((a) => a.mode === 'DEPARTAMENTO' && a.target === dept && inRange(a)) ||
+      null
+    );
+  };
+
+  const familyOf = (cyc) => (cyc.auto ? 'AUTO' : cyc.type === 'SEMANAL' ? 'FIJO' : 'ROTATIVO');
+
+  const codeForDay = (asg, cycles, dsIdxAbs, dateObj) => {
+    if (!asg) return 'SIN_ASIGNAR';
+    if (asg.shiftCode) return asg.shiftCode;
+    const cyc = cycles.find((c) => c.id === asg.cycleId);
+    if (!cyc) return 'SIN_ASIGNAR';
+    const fam = familyOf(cyc);
+    if (fam === 'AUTO') return 'AUTO';
+    if (fam === 'FIJO') {
+      const wpos = (dateObj.getDay() + 6) % 7;
+      return cyc.days[wpos % cyc.days.length];
+    }
+    const len = cyc.days.length;
+    const anchorIdx = dateIndex(asg.anchorDate || asg.startDate);
+    const phase = asg.phase || 0;
+    const pos = (((dsIdxAbs - anchorIdx + phase) % len) + len) % len;
+    return cyc.days[pos];
+  };
+
+  const getExpectedShift = (empName, dept, dateStr) => {
+    const asg = resolveAssignment(empName, dept, dateStr);
+    const dateObj = new Date(dateStr + 'T00:00:00');
+    const code = codeForDay(asg, shiftCycles, dateIndex(dateStr), dateObj);
+    const sch = scheduleCatalog.find(s => s.code === code);
+    if (!sch) return code === 'SIN_ASIGNAR' ? 'Sin Asignar' : code;
+    return `${sch.name} (${sch.startTime === 'Flexible' ? 'Flexible' : `${sch.startTime} - ${sch.endTime}`})`;
+  };
+
   // Estados de Header y Búsqueda
   const [tenantName, setTenantName] = useState('Krono Global Inc.');
   const [searchQuery, setSearchQuery] = useState('');
@@ -485,15 +607,24 @@ export default function App() {
               onAdjustPunch={handleAdjustPunch}
               onApproveException={handleApproveException}
               onAddAuditLog={handleAddAuditLog}
+              getExpectedShift={getExpectedShift}
             />
           )}
 
           {currentTab === 'Turnos y Calendarios' && (
             <ShiftsCalendars 
-              shiftsState={shifts}
               departments={departments}
-              onAddPattern={handleAddPattern}
               onAddAuditLog={handleAddAuditLog}
+              assignments={assignments}
+              setAssignments={setAssignments}
+              shiftCycles={shiftCycles}
+              setShiftCycles={setShiftCycles}
+              scheduleCatalog={scheduleCatalog}
+              setScheduleCatalog={setScheduleCatalog}
+              manualOverrides={manualOverrides}
+              setManualOverrides={setManualOverrides}
+              periodOverrides={periodOverrides}
+              setPeriodOverrides={setPeriodOverrides}
             />
           )}
 

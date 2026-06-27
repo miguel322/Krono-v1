@@ -183,51 +183,24 @@ const analyzeShifts = (shifts, catalog) => {
   };
 };
 
-export default function ShiftsCalendars({ departments, onAddAuditLog }) {
+export default function ShiftsCalendars({ 
+  departments, 
+  onAddAuditLog,
+  assignments,
+  setAssignments,
+  shiftCycles,
+  setShiftCycles,
+  scheduleCatalog,
+  setScheduleCatalog,
+  manualOverrides,
+  setManualOverrides,
+  periodOverrides,
+  setPeriodOverrides
+}) {
   const [subTab, setSubTab] = useState('ROSTER'); // ROSTER, HORARIOS, CICLOS, ASIGNADOR
 
   // ════════════════ ETAPA 1 · BIBLIOTECA DE HORARIOS ════════════════
-  const [scheduleCatalog, setScheduleCatalog] = useState([
-    {
-      id: 'SCH-FIJO-01', code: 'DF1', name: 'Diurno General Corporativo', type: 'FIJO',
-      startTime: '08:00', endTime: '17:00',
-      checkInStart: '07:00', checkInEnd: '09:30', checkOutStart: '16:30', checkOutEnd: '20:00',
-      gracePeriod: 10, otThreshold: 15, otEarly: false, otLate: true, otBase: 'TRABAJADO',
-      crossDay: false, daySpan: 1, validatePunch: true, dupMinutes: 5, dayChange: '00:00',
-      breakType: 'AUTOMATICO', breakDuration: 60,
-      bg: 'bg-blue-100 text-blue-800 border-blue-200'
-    },
-    {
-      id: 'SCH-FLEX-02', code: 'FLX', name: 'Flexible TI / Soporte', type: 'FLEXIBLE',
-      startTime: 'Flexible', endTime: 'Flexible', targetHours: 8.5, multiPunch: true,
-      gracePeriod: 0, otThreshold: 30, otBase: 'EXTRA',
-      crossDay: false, daySpan: 1, validatePunch: false, dupMinutes: 5, dayChange: '00:00',
-      breakType: 'REGISTRADO', breakDuration: 45,
-      bg: 'bg-purple-100 text-purple-800 border-purple-200'
-    },
-    {
-      id: 'SCH-NOC-03', code: 'NOC', name: 'Nocturno Rotativo Carga (+1)', type: 'NOCTURNO',
-      startTime: '22:00', endTime: '06:00',
-      checkInStart: '21:00', checkInEnd: '23:30', checkOutStart: '05:30', checkOutEnd: '08:00',
-      gracePeriod: 15, otThreshold: 20, otEarly: false, otLate: true, otBase: 'TRABAJADO',
-      crossDay: true, daySpan: 1, validatePunch: true, dupMinutes: 5, dayChange: '04:00',
-      breakType: 'AUTOMATICO', breakDuration: 30,
-      bg: 'bg-slate-800 text-white border-slate-700'
-    },
-    {
-      id: 'SCH-EXT-04', code: 'G24', name: 'Jornada Extensa Guardia', type: 'EXTENSO',
-      startTime: '08:00', endTime: '08:00', durationHours: 24,
-      gracePeriod: 15, otThreshold: 30, otBase: 'TRABAJADO',
-      crossDay: true, daySpan: 2, validatePunch: true, dupMinutes: 10, dayChange: '00:00',
-      breakType: 'AUTOMATICO', breakDuration: 120,
-      bg: 'bg-amber-100 text-amber-800 border-amber-200'
-    },
-    {
-      id: 'SCH-DESC-05', code: 'LIB', name: 'Día Libre (Descanso)', type: 'DESCANSO',
-      startTime: 'N/A', endTime: 'N/A', otMultiplier: 2.0,
-      bg: 'bg-slate-100 text-slate-400 border-slate-200'
-    }
-  ]);
+  // scheduleCatalog is now received as a prop from App.jsx
 
   // Formulario de nuevo horario
   const [schType, setSchType] = useState('FIJO');
@@ -254,28 +227,7 @@ export default function ShiftsCalendars({ departments, onAddAuditLog }) {
   const [schColor, setSchColor] = useState('blue');
 
   // ════════════════ ETAPA 2 · CICLOS DE TURNOS ════════════════
-  const [shiftCycles, setShiftCycles] = useState([
-    {
-      id: 'CYC-SEM-01', name: 'Semanal Administrativo Estándar', type: 'SEMANAL', auto: false,
-      days: ['DF1', 'DF1', 'DF1', 'DF1', 'DF1', 'LIB', 'LIB'],
-      desc: 'Lunes a Viernes Diurno, Sábado y Domingo Libres'
-    },
-    {
-      id: 'CYC-ROT-02', name: 'Rotativo Vigilancia 12x24', type: 'CUSTOM', auto: false,
-      days: ['DF1', 'LIB', 'NOC', 'LIB'],
-      desc: 'Diurno → Libre → Nocturno → Libre (ciclo continuo de 4 días)'
-    },
-    {
-      id: 'CYC-ROT-03', name: 'Guardia Médica 24x48', type: 'CUSTOM', auto: false,
-      days: ['G24', 'LIB', 'LIB'],
-      desc: 'Guardia 24 horas + 48 horas de descanso continuo'
-    },
-    {
-      id: 'CYC-AUTO-04', name: 'Multi-turno Automático (IA)', type: 'AUTO', auto: true,
-      days: [],
-      desc: 'El sistema detecta el turno (Diurno/Vespertino/Nocturno) según la hora del marcaje'
-    }
-  ]);
+  // shiftCycles is now received as a prop from App.jsx
 
   // Formulario nuevo ciclo
   const [cycName, setCycName] = useState('');
@@ -317,17 +269,7 @@ export default function ShiftsCalendars({ departments, onAddAuditLog }) {
   //   { mode: 'NINGUNA' }  → fijo permanente, no se anuncia.
   //   { mode: 'PERIODICA', cadence, noticeDay (0-6), lead } → rotativo anunciado.
   const PUB_NONE = { mode: 'NINGUNA' };
-  const [assignments, setAssignments] = useState([
-    { id: 'ASG-OPS', mode: 'DEPARTAMENTO', target: 'Operaciones', cycleId: 'CYC-ROT-02', startDate: ANCHOR, endDate: '2026-07-31', isTemp: false, phase: 0, pub: { mode: 'PERIODICA', cadence: 'SEMANAL', noticeDay: 5, lead: 1 } },
-    { id: 'ASG-LOG', mode: 'DEPARTAMENTO', target: 'Logística', cycleId: 'CYC-ROT-02', startDate: ANCHOR, endDate: '2026-07-31', isTemp: false, phase: 1, pub: { mode: 'PERIODICA', cadence: 'QUINCENAL', noticeDay: 4, lead: 1 } },
-    { id: 'ASG-TI', mode: 'DEPARTAMENTO', target: 'TI y Sistemas', cycleId: 'CYC-SEM-01', startDate: ANCHOR, endDate: '2026-07-31', isTemp: false, phase: 0, pub: PUB_NONE },
-    { id: 'ASG-RH', mode: 'DEPARTAMENTO', target: 'Recursos Humanos', cycleId: 'CYC-SEM-01', startDate: ANCHOR, endDate: '2026-07-31', isTemp: false, phase: 0, pub: PUB_NONE },
-    { id: 'ASG-LUCIA', mode: 'EMPLEADO', target: 'Lucía Fernández', cycleId: 'CYC-ROT-03', startDate: ANCHOR, endDate: '2026-07-31', isTemp: false, phase: 0, pub: { mode: 'PERIODICA', cadence: 'MENSUAL', noticeDay: 1, lead: 1 } },
-    { id: 'EXC-MARIA', mode: 'EMPLEADO', target: 'María Gómez', shiftCode: 'G24', startDate: '2026-07-05', endDate: '2026-07-05', isTemp: true, exceptionType: 'REEMPLAZAR' }
-  ]);
-
-  // Overrides puntuales por celda (edición inline + reparaciones del motor)
-  const [manualOverrides, setManualOverrides] = useState({});
+  // assignments and manualOverrides are now received as props from App.jsx
 
   // ════════════════ PUBLICACIÓN · estado del lifecycle (genérico) ════════════════
   // Ya NO está cableado a "viernes" ni a "semanal". El horizonte se mide en PERIODOS
@@ -336,7 +278,7 @@ export default function ShiftsCalendars({ departments, onAddAuditLog }) {
   const [periodsElapsed, setPeriodsElapsed] = useState(0);       // periodos transcurridos (simulación)
   const [publishedByCal, setPublishedByCal] = useState({});      // calId -> índice de periodo publicado hasta
   const [selectedPeriodIdx, setSelectedPeriodIdx] = useState(null); // periodo abierto en el detalle
-  const [periodOverrides, setPeriodOverrides] = useState({});    // ajustes de borrador, key: name|YYYY-MM-DD
+  // periodOverrides is now received as a prop from App.jsx
   const [notifications, setNotifications] = useState([]);        // avisos despachados al publicar
   const [activeWeekCell, setActiveWeekCell] = useState(null);
 

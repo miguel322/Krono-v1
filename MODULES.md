@@ -27,6 +27,7 @@ A continuación se describen los módulos funcionales de la plataforma, implemen
 *   **Función Principal:** Monitorear activamente las entradas, salidas y el estatus actual de toda la plantilla de empleados durante la jornada en curso.
 *   **Detalles Técnicos:**
     *   **Metadatos de Registro:** Captura e inspecciona la red WiFi (SSID/BSSID), huella del dispositivo (navegador, sistema operativo), precisión GPS, y estado de autenticación biométrica (FaceID/TouchID local).
+    *   **Integración Dinámica con el Roster:** Resuelve reactivamente el turno programado del día de hoy (`2026-06-27`) para cada colaborador cruzando el estado global de asignaciones y overrides de turnos, reflejando inmediatamente cualquier cambio del AutoScheduler o ajustes en el cuadrante.
     *   **Ajustes de Marcaje de Emergencia:** Permite a los administradores ajustar manualmente horas de entrada y salida, requiriendo una nota de justificación obligatoria. Esto genera automáticamente un registro en la pista de auditoría.
     *   **Waiver (Exenciones):** Flujo de un solo clic para aprobar excepciones por retardos de forma justificada directamente desde la fila del empleado.
 

@@ -8,7 +8,8 @@ export default function LiveAttendance({
   employees, 
   onAdjustPunch, 
   onApproveException,
-  onAddAuditLog 
+  onAddAuditLog,
+  getExpectedShift
 }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
@@ -182,7 +183,7 @@ export default function LiveAttendance({
                     {/* Turno */}
                     <td className="py-4 px-6">
                       <span className="text-xs font-semibold text-slate-500 bg-slate-100 px-2 py-1 rounded">
-                        {emp.shift}
+                        {getExpectedShift ? getExpectedShift(emp.name, emp.department, '2026-06-27') : emp.shift}
                       </span>
                     </td>
 
