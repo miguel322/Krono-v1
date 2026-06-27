@@ -96,7 +96,14 @@ A continuación se describen los módulos funcionales de la plataforma, implemen
 
 El módulo implementado en [ShiftsCalendars.jsx](file:///c:/Projects/Krono/src/components/ShiftsCalendars.jsx) es la sección más compleja del sistema. A diferencia de las soluciones tradicionales de asistencia basadas únicamente en registros lineales de entrada y salida, Krono implementa un **motor bidireccional de asignación horaria, cuadrantes flexibles y validación algorítmica**.
 
-El módulo está estructurado en torno a cinco pilares de lógica y una matriz de excepciones.
+El módulo está estructurado como un **flujo guiado de 3 etapas encadenadas** (Horarios → Ciclos → Calendarios) cuyo resultado, el **Roster**, no se escribe a mano: se **deriva automáticamente** mediante un motor determinista. Sobre ese resultado opera además una **capa de publicación configurable por calendario**. En total son seis pilares de lógica y una matriz de excepciones.
+
+> **Principio rector:** todo lo que el manual de referencia (BioTime Pro) hacía de forma manual —asignar el horario día por día, rellenar plantillas semana a semana, resolver solapes a mano— en Krono se resuelve de forma automática. El cuadrante es una *función pura* de los horarios, los ciclos y los calendarios vigentes (`buildRoster` + `useMemo`): cualquier cambio en una asignación recalcula todo el cuadrante en tiempo real.
+
+> **La distinción más importante — Familia del horario (`familyOf`):** Krono clasifica cada ciclo en una de tres familias, y de ahí se deriva *todo* su comportamiento:
+> - **`FIJO`** — patrón anclado a los **días de la semana reales** (Lunes…Domingo). Se repite idéntico para siempre, **no rota** y **no necesita publicarse**. La posición del turno se calcula por el día de la semana del calendario, no por un ancla de rotación.
+> - **`ROTATIVO`** — secuencia de N días que **avanza con el tiempo**, desacoplada de la semana natural. La posición se calcula por los días transcurridos desde el ancla (`(díaAbs − ancla + fase) mod N`). Aquí vive toda la complejidad: longitud de ciclo arbitraria, fase por grupo para cubrir franjas, continuidad/rodaje y descanso entre rotaciones.
+> - **`AUTO`** — el turno se resuelve por la hora del marcaje (IA).
 
 ### 1. Biblioteca de Horarios (Catálogo)
 Este componente permite dar de alta y estructurar las reglas operativas de cada jornada laboral. Un horario en Krono no es solo una hora de inicio y fin, sino una estructura enriquecida de reglas de cumplimiento:
@@ -149,6 +156,29 @@ graph TD
 1.  **Restricción de Descanso Fisiológico:** Garantiza que no se asigne un turno diurno que inicie inmediatamente después de un turno nocturno o extenso, exigiendo al menos 12 horas continuas de descanso inter-jornada.
 2.  **Prevención de Fatiga (Colisión Nocturna):** Evita la asignación de turnos nocturnos contiguos sin días libres de por medio.
 3.  **Firma Criptográfica:** Cuando el algoritmo resuelve el cuadrante de forma exitosa, genera un hash SHA-256 de control para asegurar la integridad de la programación autogenerada, guardando la evidencia en el módulo de auditoría.
+
+### 6. Publicación Configurable por Calendario (Rolling Horizon Genérico)
+Esta capa operativa resuelve el patrón de operaciones con **rotación anunciada** (casinos, retail, seguridad, hostelería): los empleados rotan periodo a periodo, pero la gerencia **cierra y comunica el horario del próximo periodo** con cierta anticipación, para que cada colaborador conozca su turno por adelantado.
+
+> **No está cableada a "viernes" ni a "semanal".** El "viernes" fue sólo un ejemplo de uso. La cadencia, el día de aviso y el adelanto son una **política configurable por cada calendario** (`assignment.pub`), de modo que distintos clientes, departamentos o empleados conviven con ritmos diferentes.
+
+Krono separa deliberadamente **dos preocupaciones distintas** que las soluciones tradicionales mezclan:
+
+1.  **La rotación en sí** (qué turno toca) — resuelta por el motor determinista de ciclos `ROTATIVO` + fase. Un casino se modela con un ciclo `CUSTOM` de 21 días (3 semanas: mañana → tarde → noche) y el equipo dividido en grupos con `phase` 0/7/14 para cubrir las tres franjas cada semana. Los horarios `FIJO` **no entran aquí**: son permanentes y no se publican.
+2.  **El lifecycle de publicación** (cuándo se congela y se avisa) — un **horizonte que rueda** medido en **periodos** (no en semanas fijas), cuya longitud depende de la cadencia del calendario:
+
+| Política (`assignment.pub`) | Efecto |
+| :--- | :--- |
+| `{ mode: 'NINGUNA' }` | Calendario **permanente** (default para los `FIJO`): no se anuncia, siempre vigente. |
+| `{ mode: 'PERIODICA', cadence, noticeDay, lead }` | **Anunciado**: `cadence` = `SEMANAL` (7d) / `QUINCENAL` (14d) / `MENSUAL` (30d); `noticeDay` = día de aviso (cualquiera, 0–6); `lead` = nº de periodos publicados por adelantado. |
+
+Estados por periodo del horizonte: `EN CURSO` 🔒 · `PUBLICADA` 🔒 (comunicada y notificada) · `BORRADOR` ✏️ (próximo periodo, editable por la gerencia) · `PROYECTADA` (futuro, sólo vista previa).
+
+**Mecánica de cierre:** la acción **`Publicar + Notificar`** toma el `BORRADOR` del **calendario seleccionado**, lo congela (`PUBLICADA`), despacha un **aviso individual** a cada empleado de la población de ese calendario (departamento o individuo) y registra el evento en la Bitácora (`PUBLICAR_PERIODO`). El **horizonte rueda un periodo** y el siguiente proyectado se vuelve el nuevo `BORRADOR`, pre-rellenado desde la rotación.
+
+**Tolerancia a cambios:** los ajustes de la gerencia (overrides por celda, clave `nombre|fecha`) afectan **únicamente al borrador no publicado**, sin alterar la rotación de fondo. Un cambio sobre un periodo **ya publicado** no se reescribe en silencio: queda fuera del flujo de borrador y debe entrar como intercambio de turno auditado (ESS), lo que vuelve a disparar la notificación. Así nadie se entera tarde de un cambio.
+
+> En `ShiftsCalendars.jsx` esta lógica vive en `familyOf` (clasificación), `periodStateOf` / `buildPeriod` / `periodCoverage` (horizonte por periodos según la cadencia del calendario) y `handlePublishPeriod` / `handleAdvancePeriod` / `updateSelectedPolicy`. El botón **"Simular próximo aviso"** avanza el reloj del horizonte para demostrar el ciclo sin esperar (es un prototipo solo-frontend; en producción sería un *cron* por cadencia).
 
 ---
 
