@@ -536,6 +536,12 @@ export default function ShiftsCalendars({ departments, onAddAuditLog }) {
       return;
     }
 
+    // Salvaguarda: Evitar ejecuciones accidentales y mostrar los afectados
+    const affectedNames = unassignedEmps.map((e) => `${e.name} (${e.department})`).join(', ');
+    const confirmMsg = `AutoScheduler de Krono\n\nSe encontraron ${unassignedEmps.length} colaboradores sin planificación activa:\n[ ${affectedNames} ]\n\nEl sistema les asignará automáticamente el ciclo de su departamento (o el horario administrativo fijo L-V por defecto) y resolverá colisiones de descanso.\n\n¿Desea proceder con la autoprogramación?`;
+    
+    if (!window.confirm(confirmMsg)) return;
+
     // 2. Heredar el ciclo del departamento (o el semanal por defecto)
     const newAsgs = unassignedEmps.map((e) => {
       const deptAsg = assignments.find((a) => a.mode === 'DEPARTAMENTO' && a.target === e.department && !a.isTemp);
@@ -1374,7 +1380,11 @@ export default function ShiftsCalendars({ departments, onAddAuditLog }) {
                     <div className="grid grid-cols-2 gap-2 max-h-44 overflow-y-auto p-2 border rounded-lg bg-slate-50">
                       {Array.from({ length: cycType === 'SEMANAL' ? 7 : cycLength }).map((_, idx) => (
                         <div key={idx} className="bg-white p-2 rounded-lg border border-slate-200/80 shadow-xs flex flex-col gap-1">
-                          <span className="text-[8px] font-bold text-slate-400 uppercase">Día {idx + 1}</span>
+                          <span className="text-[8px] font-bold text-slate-400 uppercase">
+                            {cycType === 'SEMANAL'
+                              ? ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'][idx]
+                              : `Día ${idx + 1}`}
+                          </span>
                           <select
                             value={cycDays[idx] || 'LIB'}
                             onChange={(e) => { const u = [...cycDays]; u[idx] = e.target.value; setCycDays(u); }}
@@ -1420,13 +1430,17 @@ export default function ShiftsCalendars({ departments, onAddAuditLog }) {
                   {!cyc.auto && (
                     <div className="flex flex-wrap gap-2 pt-2 border-t">
                       {cyc.days.map((code, idx) => (
-                        <div key={idx} className="flex items-center gap-1">
-                          <div className="flex flex-col items-center">
-                            <span className="text-[8px] text-slate-400 font-bold">DÍA {idx + 1}</span>
-                            <span className={`px-2 py-0.5 rounded font-mono font-bold text-[10px] border ${getShiftBadgeStyle(code)}`}>{code}</span>
-                          </div>
-                          {idx < cyc.days.length - 1 && <span className="text-slate-300 font-bold self-end mb-1">➔</span>}
-                        </div>
+                         <div key={idx} className="flex items-center gap-1">
+                           <div className="flex flex-col items-center">
+                             <span className="text-[8px] text-slate-400 font-bold">
+                               {cyc.type === 'SEMANAL'
+                                 ? ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'][idx]
+                                 : `DÍA ${idx + 1}`}
+                             </span>
+                             <span className={`px-2 py-0.5 rounded font-mono font-bold text-[10px] border ${getShiftBadgeStyle(code)}`}>{code}</span>
+                           </div>
+                           {idx < cyc.days.length - 1 && <span className="text-slate-300 font-bold self-end mb-1">➔</span>}
+                         </div>
                       ))}
                     </div>
                   )}

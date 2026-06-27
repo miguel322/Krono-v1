@@ -14,6 +14,7 @@
 *   **Algoritmo de Autoprogramación (AutoScheduler):** Motor inteligente integrado que genera cuadrantes de forma automatizada respetando los descansos obligatorios de 12 horas entre jornadas, colisiones de turnos nocturnos contiguos y leyes laborales.
 *   **Control de Incidencias:** Motor de excepciones en tiempo real que alerta sobre retardos, salidas tempranas, ausencias sin justificar o registros huérfanos con gestión de SLAs y escalado de flujos.
 *   **Pre-Nómina y Horas Extras:** Cálculo automatizado de horas ordinarias y extras (1.5x, 2.0x, 1.75x feriado) con validación de umbrales y exportación.
+*   **Módulo de Reportes y Telemetría:** Centro avanzado para la generación de reportes operativos (asistencia diaria/semanal/mensual, detalles de entradas/salidas, tardanzas, ausencias, horas extras y salidas anticipadas) con soporte de filtros dinámicos, exportación nativa a Excel (CSV) y plantillas de impresión PDF optimizadas con firmas criptográficas de integridad SHA-256.
 *   **Autoservicio del Empleado (ESS Requests):** Permite a los colaboradores solicitar correcciones de marcaje, ingresos retroactivos, justificar ausencias con adjuntos (PDF/JPG) e intercambiar turnos entre pares.
 *   **Control de Visitantes:** Generación de invitaciones QR con geocercas para accesos temporales y alertas inmediatas al anfitrión.
 *   **Reserva de Salas de Reunión:** Programación visual de espacios de trabajo integrados con sensores simulados de presencia IoT y cancelación automática por incomparecencia (no-show) tras 10 minutos.
@@ -50,6 +51,7 @@ Krono/
 │   │   ├── MeetingRooms.jsx      # Reserva inteligente de salas e IoT
 │   │   ├── Organization.jsx      # Organigrama, geocercas y redes Wi-Fi
 │   │   ├── PayrollOvertime.jsx   # Reportes de horas extras y pre-nómina
+│   │   ├── Reports.jsx           # [NUEVO] Centro de reportes y exportaciones XLS/PDF
 │   │   ├── Settings.jsx          # Ajustes globales de seguridad y límites
 │   │   ├── ShiftsCalendars.jsx   # [COMPLEJO] Control de horarios y turnos
 │   │   └── Visitors.jsx          # Gestión y accesos de visitantes

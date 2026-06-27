@@ -51,40 +51,49 @@ A continuación se describen los módulos funcionales de la plataforma, implemen
     *   Cálculo automático de bonificaciones para días festivos laborados (1.75x o Doble Base según matriz oficial).
     *   Función de "Cierre de Nómina" (Payroll Lock) con firma digital criptográfica de integridad y exportación compatible con ERPs en formatos estructurados.
 
-### 6. Autoservicio del Empleado ([EssRequests.jsx](file:///c:/Projects/Krono/src/components/EssRequests.jsx))
+### 6. Módulo de Reportes y Telemetría ([Reports.jsx](file:///c:/Projects/Krono/src/components/Reports.jsx))
+*   **Función Principal:** Generar informes detallados de control laboral, auditar la asistencia histórica y exportar datos en formatos Excel e impresiones firmadas PDF.
+*   **Detalles Técnicos:**
+    *   **Reportes Disponibles:** Soporta reportes de Asistencia Diaria/Semanal/Mensual, Detalle de Entradas y Salidas, Tardanzas, Ausencias, Horas Extras y Salidas Anticipadas.
+    *   **Filtros Combinados:** Permite segmentar dinámicamente por Rango de Fechas, Departamento y Colaborador individual.
+    *   **Exportación de Datos:** Descarga nativa en cliente de archivos CSV estructurados compatibles con Excel.
+    *   **Plantilla de Impresión PDF:** Incluye estilos `@media print` dedicados para formatear el reporte en formato membretado, ocultando controles de interfaz e integrando bloques de firma física y digital.
+    *   **Seguridad:** Sello de integridad criptográfica SHA-256 e IP del operador en la base del reporte.
+
+### 7. Autoservicio del Empleado ([EssRequests.jsx](file:///c:/Projects/Krono/src/components/EssRequests.jsx))
 *   **Función Principal:** Canal bidireccional donde los empleados solicitan correcciones o justificaciones de asistencia.
 *   **Detalles Técnicos:**
     *   Tipos de solicitudes soportadas: Marcaje Retroactivo, Corrección de Marcaje, Justificación de Ausencias e Intercambio de Turnos (Shift Swapping).
     *   Soporta la carga de evidencias digitales (simulación de carga de archivos PDF o JPG de justificantes médicos o de transporte).
     *   Validación de geoposicionamiento en el momento de realizar la solicitud.
 
-### 7. Control de Visitantes ([Visitors.jsx](file:///c:/Projects/Krono/src/components/Visitors.jsx))
+### 8. Control de Visitantes ([Visitors.jsx](file:///c:/Projects/Krono/src/components/Visitors.jsx))
 *   **Función Principal:** Registrar y autorizar el acceso de personal externo a las instalaciones físicas.
 *   **Detalles Técnicos:**
     *   Genera credenciales QR temporales con rangos de validez estrictos.
     *   Flujo de pre-registro por parte del anfitrión (host) interno.
     *   Al arribar el visitante, se ejecuta una verificación por geocerca y se despacha una notificación de alerta al anfitrión en tiempo real.
 
-### 8. Salas de Reunión ([MeetingRooms.jsx](file:///c:/Projects/Krono/src/components/MeetingRooms.jsx))
+### 9. Salas de Reunión ([MeetingRooms.jsx](file:///c:/Projects/Krono/src/components/MeetingRooms.jsx))
 *   **Función Principal:** Gestión y optimización del uso de salas de juntas y espacios de coworking.
 *   **Detalles Técnicos:**
     *   Integración con sensores simulados de presencia IoT.
     *   **Regla "Anti-NoShow":** Si no se registra presencia física en la sala (o una confirmación digital) dentro de los primeros 10 minutos de la reserva, el sistema cancela automáticamente la reserva del espacio y actualiza el Roster de salas, optimizando la capacidad instalada.
 
-### 9. Estructura Organizativa ([Organization.jsx](file:///c:/Projects/Krono/src/components/Organization.jsx))
+### 10. Estructura Organizativa ([Organization.jsx](file:///c:/Projects/Krono/src/components/Organization.jsx))
 *   **Función Principal:** Administrar departamentos, sucursales y parámetros de validación física.
 *   **Detalles Técnicos:**
     *   Configuración de geocercas globales por sucursal (Latitud, Longitud y Radio de tolerancia en metros).
     *   Lista blanca de redes WiFi corporativas autorizadas (mapeo estricto de SSIDs y BSSIDs de puntos de acceso).
 
-### 10. Bitácora de Auditoría ([AuditTrail.jsx](file:///c:/Projects/Krono/src/components/AuditTrail.jsx))
+### 11. Bitácora de Auditoría ([AuditTrail.jsx](file:///c:/Projects/Krono/src/components/AuditTrail.jsx))
 *   **Función Principal:** Garantizar el cumplimiento regulatorio e inmutabilidad de los datos del sistema.
 *   **Detalles Técnicos:**
     *   Registro estricto de todas las mutaciones realizadas por administradores o sistemas automáticos.
     *   Para cada registro se captura: Actor, Acción, Entidad Afectada, Valor Previo, Valor Nuevo, Dirección IP, Huella del Dispositivo y Marca de tiempo UTC.
     *   **Seguridad:** Cada evento incluye una firma criptográfica SHA-256 (simulada) que valida que los registros no han sido alterados manualmente en base de datos.
 
-### 11. Ajustes y Configuración ([Settings.jsx](file:///c:/Projects/Krono/src/components/Settings.jsx))
+### 12. Ajustes y Configuración ([Settings.jsx](file:///c:/Projects/Krono/src/components/Settings.jsx))
 *   **Función Principal:** Panel de administración global del sistema.
 *   **Detalles Técnicos:**
     *   Configuración de límites globales: radio de geocercas en metros, tiempo de expiración del TOTP, requerimiento de FaceID/huella biométrica, y políticas de inicio de sesión seguro (MFA).
@@ -193,3 +202,33 @@ En industrias con operaciones continuas de 24 horas, los turnos nocturnos inicia
 Krono incorpora una matriz de días festivos oficiales configurables por región geográfica:
 *   Al procesar el registro de asistencia en un día marcado como festivo en el calendario oficial, el daemon del sistema aplica automáticamente la regla de compensación parametrizada (ej. `FERIADO_TRABAJADO`).
 *   Esto muta el estado salarial del empleado para esa jornada, aplicando el factor de incremento de nómina (ej. pago al 1.75x o doble base según la legislación local) sin requerir intervención manual de los analistas de nómina.
+
+### C. Coexistencia de Horarios Fijos, Flexibles y Rotativos sin Solapamientos
+Para soportar clientes con esquemas de personal diversos (operadores fijos, gerentes con horario flexible y vigilantes rotativos) conviviendo en la misma empresa, Krono implementa validaciones estrictas en el frontend para evitar choques:
+1.  **Compatibilidad de Lógicas de Marcaje:**
+    *   *Horarios Fijos y Rotativos:* Validados mediante marcaje estricto contra ventanas de tolerancia (`gracePeriod`). Generan incidentes automáticos de retardo si se excede la hora de entrada.
+    *   *Horarios Fijos Flexibles:* Definidos con `startTime: "Flexible"` y `targetHours`. El motor ignora la hora de llegada (no genera incidentes de retardo) y evalúa únicamente que la duración acumulada del día cumpla las horas objetivo.
+2.  **Prevención de Solapes de Calendarios (Conflict Resolution):**
+    *   Al crear una nueva asignación, la función [handleAddAssignment](file:///c:/Projects/Krono/src/components/ShiftsCalendars.jsx#L704) busca solapamientos con calendarios vigentes del mismo destinatario en el mismo rango de fechas.
+    *   *Resolución de Choques:* Si se activa "Sobrescribir Calendario", el sistema recorta automáticamente la vigencia del calendario anterior en conflicto (cierra el calendario previo el día anterior al inicio del nuevo), garantizando que un empleado nunca tenga dos asignaciones permanentes activas en la misma fecha.
+    *   Si no se activa, el formulario bloquea el envío y muestra una advertencia visual para evitar la colisión.
+3.  **Restricciones Fisiológicas del Roster:**
+    *   El motor de autoprogramación valida que no se asignen turnos que colisionen en el descanso mínimo obligatorio de 12 horas, reparando el cuadrante de forma autónoma con días libres (`LIB`) cuando detecta posibles solapes físicos.
+
+### D. Gestión de Omisiones de Marcaje (Olvidó Fichar)
+Para responder a los olvidos y errores humanos en los registros diarios de entradas y salidas, Krono implementa un workflow automático en el frontend:
+1.  **Detección e Incidencias:**
+    *   *Ausencia Injustificada:* Si un empleado no registra entrada transcurrido el umbral máximo de tolerancia (30 min), el motor de [Incidents.jsx](file:///c:/Projects/Krono/src/components/Incidents.jsx) genera un caso de gravedad *Warning*.
+    *   *Registro Huérfano:* Si el empleado marca la entrada pero olvida la salida (o al revés), al superar la duración del turno más un buffer de 4 horas, el sistema marca el estatus del empleado como `SIN_SALIDA` y genera un incidente *Critical*.
+2.  **Resolución Descentralizada (Autoservicio ESS):**
+    *   El colaborador envía una solicitud de *Marcaje Retroactivo* o *Corrección de Marcaje* desde el portal [EssRequests.jsx](file:///c:/Projects/Krono/src/components/EssRequests.jsx).
+    *   Ingresa las horas reales omitidas y adjunta evidencias justificativas (ej. archivos JPG/PDF de billetes o tickets).
+    *   Al ser aprobada por el supervisor, el sistema inyecta retroactivamente las marcas correctas en el Roster de asistencia, resuelve la incidencia asociada y emite la pista de auditoría correspondiente (`AJUSTE_MARCAJE`).
+
+### E. Traslados y Validación Geográfica (Fichaje en Otras Sucursales)
+Krono implementa un control de acceso lógico basado en perímetros físicos y de red local que evita el fraude de marcaje desde ubicaciones no autorizadas, a la vez que da flexibilidad para traslados:
+1.  **Validación de Geocercas y WiFi:**
+    *   En [DigitalClockIn.jsx](file:///c:/Projects/Krono/src/components/DigitalClockIn.jsx), el sistema verifica que el GPS del smartphone del colaborador esté dentro del radio permitido (ej. 50 metros) respecto a la sucursal asignada a su departamento, y que coincida el SSID/BSSID de red WiFi corporativo. Si hay desviación, el marcaje es rechazado visualmente.
+2.  **Mecanismos para Traslados Autorizados:**
+    *   *Excepción Temporal (Planificada):* Un administrador puede programar en el *Asignador de Turnos* una asignación temporal para el colaborador en la sucursal de destino. Esta excepción sobrescribe su geocerca habitual solo durante las fechas del traslado.
+    *   *Marcaje de Emergencia (Último Minuto):* Si el traslado no fue planificado, el supervisor de la sucursal de destino puede ingresar un fichaje manual de emergencia en el panel de [LiveAttendance.jsx](file:///c:/Projects/Krono/src/components/LiveAttendance.jsx). Este requiere justificación obligatoria y queda auditado con la IP del supervisor y sello criptográfico.

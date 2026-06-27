@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { 
   LayoutDashboard, Users, Calendar, QrCode, AlertTriangle, DollarSign, 
   FileText, UserPlus, Compass, ShieldAlert, Settings as SettingsIcon,
-  Search, Bell, User, Clock, ChevronDown, ChevronRight, Menu, X, Building2
+  Search, Bell, User, Clock, ChevronDown, ChevronRight, Menu, X, Building2,
+  BarChart2
 } from 'lucide-react';
 
 // Importar Pantallas en Español
@@ -18,6 +19,7 @@ import MeetingRooms from './components/MeetingRooms';
 import AuditTrail from './components/AuditTrail';
 import Settings from './components/Settings';
 import Organization from './components/Organization';
+import Reports from './components/Reports';
 
 // Importar Base de Datos Simulada en Español
 import {
@@ -256,6 +258,7 @@ export default function App() {
     { label: 'Marcaje Digital', icon: QrCode },
     { label: 'Triage de Incidentes', icon: AlertTriangle, badge: incidents.length },
     { label: 'Nómina y Horas Extras', icon: DollarSign },
+    { label: 'Centro de Reportes', icon: BarChart2 },
     { label: 'Solicitudes ESS', icon: FileText, badge: requests.filter(r => r.status === 'PENDIENTE').length },
     { label: 'Control de Visitantes', icon: UserPlus },
     { label: 'Salas de Reunión', icon: Compass, badge: rooms.filter(r => r.status === 'RESERVADO' && r.slaTimer > 0).length },
@@ -512,6 +515,14 @@ export default function App() {
           {currentTab === 'Nómina y Horas Extras' && (
             <PayrollOvertime 
               payrollState={payroll}
+              onAddAuditLog={handleAddAuditLog}
+            />
+          )}
+
+          {currentTab === 'Centro de Reportes' && (
+            <Reports 
+              employees={employees}
+              departments={departments}
               onAddAuditLog={handleAddAuditLog}
             />
           )}
