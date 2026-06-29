@@ -65,7 +65,9 @@ const resolveAssignment = (empName, dept, ds, assignments) => {
   const inRange = (a) => ds >= a.startDate && ds <= a.endDate;
   return (
     assignments.find((a) => a.isTemp && a.mode === 'EMPLEADO' && a.target === empName && inRange(a)) ||
+    assignments.find((a) => a.isTemp && a.mode === 'EMPLEADO' && a.target === 'ALL_EMPLOYEES' && inRange(a)) ||
     assignments.find((a) => !a.isTemp && a.mode === 'EMPLEADO' && a.target === empName && inRange(a)) ||
+    assignments.find((a) => !a.isTemp && a.mode === 'EMPLEADO' && a.target === 'ALL_EMPLOYEES' && inRange(a)) ||
     assignments.find((a) => a.mode === 'DEPARTAMENTO' && a.target === dept && inRange(a)) ||
     null
   );
@@ -1712,7 +1714,15 @@ export default function ShiftsCalendars({
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <label className="block text-slate-500">Modo</label>
-                  <select value={asgMode} onChange={(e) => setAsgMode(e.target.value)} className="w-full px-2.5 py-2 border rounded-lg focus:ring-1">
+                  <select 
+                    value={asgMode} 
+                    onChange={(e) => {
+                      const mode = e.target.value;
+                      setAsgMode(mode);
+                      setAsgTarget(mode === 'DEPARTAMENTO' ? (departments[0]?.name || 'Operaciones') : 'ALL_EMPLOYEES');
+                    }} 
+                    className="w-full px-2.5 py-2 border rounded-lg focus:ring-1 text-slate-700 bg-white"
+                  >
                     <option value="DEPARTAMENTO">Por Departamento</option>
                     <option value="EMPLEADO">Por Empleado</option>
                   </select>
@@ -1720,13 +1730,14 @@ export default function ShiftsCalendars({
                 <div className="space-y-1">
                   <label className="block text-slate-500">Destinatario</label>
                   {asgMode === 'DEPARTAMENTO' ? (
-                    <select value={asgTarget} onChange={(e) => setAsgTarget(e.target.value)} className="w-full px-2.5 py-2 border rounded-lg focus:ring-1">
+                    <select value={asgTarget} onChange={(e) => setAsgTarget(e.target.value)} className="w-full px-2.5 py-2 border rounded-lg focus:ring-1 text-slate-700 bg-white">
                       {departments.map((d) => (
                         <option key={d.name || d} value={d.name || d}>{d.name || d}</option>
                       ))}
                     </select>
                   ) : (
-                    <select value={asgTarget} onChange={(e) => setAsgTarget(e.target.value)} className="w-full px-2.5 py-2 border rounded-lg focus:ring-1">
+                    <select value={asgTarget} onChange={(e) => setAsgTarget(e.target.value)} className="w-full px-2.5 py-2 border rounded-lg focus:ring-1 text-slate-700 font-bold bg-white">
+                      <option value="ALL_EMPLOYEES">Todos los empleados</option>
                       {Object.keys(roster).map((name) => (<option key={name} value={name}>{name}</option>))}
                     </select>
                   )}
@@ -1916,7 +1927,9 @@ export default function ShiftsCalendars({
                     return (
                       <tr key={asg.id} className={`hover:bg-slate-50/50 ${superseded ? 'opacity-50' : ''}`}>
                         <td className="py-2.5 px-4">
-                          <span className="font-bold text-slate-800 block">{asg.target}</span>
+                          <span className="font-bold text-slate-800 block">
+                            {asg.target === 'ALL_EMPLOYEES' ? 'Todos los empleados' : asg.target}
+                          </span>
                           <span className="text-[9px] text-slate-400 block font-medium">{asg.mode}</span>
                         </td>
                         <td className="py-2.5 px-4">
