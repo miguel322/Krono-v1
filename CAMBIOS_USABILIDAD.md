@@ -72,3 +72,16 @@ Este documento resume los cambios realizados en el frontend de Krono para cumpli
 *   **Heurística 10: Ayuda y Documentación**
     *   **Implementación**: Panel lateral educativo de ayuda multisucursal detallando el uso de zonas horarias para la reconciliación y filtros de IPs CIDR en marcajes móviles.
 
+---
+
+## 5. Módulo: Carga Masiva y Automatización de Calendarios (Excel/CSV de Gerencia)
+
+*   **Heurística 2: Relación entre el Sistema y el Mundo Real**
+    *   **Implementación**: El parser limpia y traduce automáticamente la jerarquía visual de los Excel de gerencia (detecta separadores de departamentos en filas, mapea nombres de días en español y normaliza horas de turnos complejas como `10.00 -19.30` a `10:00-19:30`).
+*   **Heurística 5: Prevención de Errores**
+    *   **Implementación**: Validación pre-flight al importar planillas. La consola de importación verifica y alerta si se intentan cargar turnos para colaboradores no registrados en la base de datos o ciclos inexistentes antes de guardar.
+*   **Heurística 8: Estética y Diseño Minimalista**
+    *   **Implementación**: La tabla de vigencias de turnos ahora reemplaza la palabra genérica `EMPLEADO` por el **departamento real** de cada colaborador en el subtítulo para facilitar el escaneo visual rápido de las asignaciones individuales.
+*   **Heurística 9: Reconocer y Recuperar Errores**
+    *   **Implementación**: Consola interactiva de logs de carga masiva detallando línea por línea la validación de cada registro procesado en el CSV.
+
