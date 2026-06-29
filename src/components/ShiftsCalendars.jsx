@@ -3,7 +3,7 @@ import {
   Calendar, RotateCcw, Plus, Clock, CheckCircle, X, ArrowRightLeft, AlertCircle,
   Sparkles, Sliders, Layers, Moon, Coffee, ShieldCheck, Wand2, ChevronRight,
   Users, AlertTriangle, Zap, GitBranch, Info, Activity,
-  Lock, Bell, Send, CalendarCheck, PenLine
+  Lock, Send, Upload, Download, FileText, Check
 } from 'lucide-react';
 
 /* ════════════════════════════════════════════════════════════════════════
@@ -26,6 +26,9 @@ import {
 const ANCHOR = '2026-07-01';
 const DAY_MS = 86400000;
 const REST_REQUIRED_H = 12; // descanso fisiológico mínimo entre jornadas
+
+const DAY_NAMES = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+const CADENCE_LABEL = { SEMANAL: 'Semanal', QUINCENAL: 'Quincenal', MENSUAL: 'Mensual' };
 
 // ── Utilidades puras de tiempo ─────────────────────────────────────────────
 const fmtDate = (d) =>
@@ -82,10 +85,7 @@ const FAMILY_META = {
   AUTO: { label: 'AUTO', cls: 'bg-amber-50 text-amber-700 border-amber-200' }
 };
 
-// Cadencias de publicación (longitud del periodo en días) y nombres de día.
-const CADENCE_LEN = { SEMANAL: 7, QUINCENAL: 14, MENSUAL: 30 };
-const CADENCE_LABEL = { SEMANAL: 'Semanal', QUINCENAL: 'Quincenal', MENSUAL: 'Mensual' };
-const DAY_NAMES = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+
 
 // Código de turno que corresponde a un día concreto, según la FAMILIA del ciclo.
 const codeForDay = (asg, cycles, dsIdxAbs, dateObj) => {
@@ -268,19 +268,16 @@ export default function ShiftsCalendars({
   // pub: política de publicación POR CALENDARIO.
   //   { mode: 'NINGUNA' }  → fijo permanente, no se anuncia.
   //   { mode: 'PERIODICA', cadence, noticeDay (0-6), lead } → rotativo anunciado.
-  const PUB_NONE = { mode: 'NINGUNA' };
-  // assignments and manualOverrides are now received as props from App.jsx
 
-  // ════════════════ PUBLICACIÓN · estado del lifecycle (genérico) ════════════════
-  // Ya NO está cableado a "viernes" ni a "semanal". El horizonte se mide en PERIODOS
-  // cuya longitud y día de aviso vienen de la política del calendario seleccionado.
-  const [selectedCalId, setSelectedCalId] = useState('ASG-OPS'); // calendario en planificación
-  const [periodsElapsed, setPeriodsElapsed] = useState(0);       // periodos transcurridos (simulación)
-  const [publishedByCal, setPublishedByCal] = useState({});      // calId -> índice de periodo publicado hasta
-  const [selectedPeriodIdx, setSelectedPeriodIdx] = useState(null); // periodo abierto en el detalle
-  // periodOverrides is now received as a prop from App.jsx
-  const [notifications, setNotifications] = useState([]);        // avisos despachados al publicar
-  const [activeWeekCell, setActiveWeekCell] = useState(null);
+
+  // Estados para la Importación de Excel (CSV)
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importPreview, setImportPreview] = useState(null);
+  const [importError, setImportError] = useState('');
+
+  // Estados de Ciclo de Vida y Heurísticas (Simplificación de Publicación)
+  const [isRosterPublished, setIsRosterPublished] = useState(false);
+  const [showCellConfirmModal, setShowCellConfirmModal] = useState(null); // { employee, dayIndex, code }
 
   // Formulario nuevo asignador
   const [asgMode, setAsgMode] = useState('DEPARTAMENTO');
@@ -328,126 +325,7 @@ export default function ShiftsCalendars({
     return { byEmp: out, totalConflicts, unassignedCells };
   }, [roster, scheduleCatalog]);
 
-  // ── Lógica de Publicación genérica (horizonte rodante por PERIODOS) ──
-  const HORIZON_START = '2026-06-29'; // día base del periodo en curso (índice 0)
-  const calById = (id) => assignments.find((a) => a.id === id);
 
-  // Calendarios que SÍ se publican (rotativos con política periódica).
-  const publishableCals = assignments.filter((a) => !a.isTemp && a.pub && a.pub.mode === 'PERIODICA');
-  // Calendarios fijos / permanentes (no se anuncian).
-  const fixedCals = assignments.filter((a) => !a.isTemp && (!a.pub || a.pub.mode === 'NINGUNA'));
-
-  const selectedCal = calById(selectedCalId) || publishableCals[0];
-  const selPub = (selectedCal && selectedCal.pub) || { mode: 'PERIODICA', cadence: 'SEMANAL', noticeDay: 5, lead: 1 };
-  const periodLen = CADENCE_LEN[selPub.cadence] || 7;
-
-  const periodDaysOf = (absP) =>
-    Array.from({ length: periodLen }, (_, i) => {
-      const d = new Date(HORIZON_START + 'T00:00:00');
-      d.setDate(d.getDate() + absP * periodLen + i);
-      return d;
-    });
-  const periodRangeLabel = (absP) => {
-    const days = periodDaysOf(absP);
-    const f = (d) => `${d.getDate()}/${d.getMonth() + 1}`;
-    return `${f(days[0])} – ${f(days[days.length - 1])}`;
-  };
-  const periodRelLabel = (absP) =>
-    absP === periodsElapsed ? 'Periodo actual' : absP === periodsElapsed + 1 ? 'Próximo periodo' : `Periodo +${absP - periodsElapsed}`;
-
-  // Frontera de publicación del calendario seleccionado (default: actual + lead).
-  const publishedUpTo = () => {
-    const v = publishedByCal[selectedCalId];
-    return v === undefined ? periodsElapsed + (selPub.lead || 1) : Math.max(v, periodsElapsed);
-  };
-  const periodStateOf = (absP) => {
-    const pub = publishedUpTo();
-    if (absP < periodsElapsed) return 'CERRADA';
-    if (absP === periodsElapsed) return 'EN_CURSO';
-    if (absP <= pub) return 'PUBLICADA';
-    if (absP === pub + 1) return 'BORRADOR';
-    return 'PROYECTADA';
-  };
-
-  // Población cubierta por el calendario seleccionado.
-  const calPopulation = (cal) => {
-    if (!cal) return [];
-    return cal.mode === 'DEPARTAMENTO'
-      ? baseEmployees.filter((e) => e.department === cal.target)
-      : baseEmployees.filter((e) => e.name === cal.target);
-  };
-
-  const buildPeriod = (absP, population) => {
-    const days = periodDaysOf(absP);
-    const r = {};
-    population.forEach(({ name, department }) => {
-      r[name] = days.map((d) => {
-        const ds = fmtDate(d);
-        const asg = resolveAssignment(name, department, ds, assignments);
-        let code = codeForDay(asg, shiftCycles, dateIndex(ds), d);
-        const ov = periodOverrides[`${name}|${ds}`];
-        if (ov !== undefined) code = ov;
-        return { ds, code };
-      });
-    });
-    return r;
-  };
-  const periodCoverage = (absP, population) => {
-    const counts = {};
-    Object.values(buildPeriod(absP, population)).forEach((arr) =>
-      arr.forEach(({ code }) => { counts[code] = (counts[code] || 0) + 1; })
-    );
-    return counts;
-  };
-
-  const selectedPeriodResolved = selectedPeriodIdx === null ? publishedUpTo() + 1 : selectedPeriodIdx;
-
-  const handlePublishPeriod = () => {
-    const p = publishedUpTo() + 1;
-    const pop = calPopulation(selectedCal);
-    const data = buildPeriod(p, pop);
-    const recipients = Object.keys(data);
-    const stamp = new Date().toTimeString().substring(0, 5);
-    const newNotifs = recipients.map((name) => ({
-      id: `NTF-${Math.floor(1000 + Math.random() * 9000)}`,
-      employee: name,
-      week: periodRangeLabel(p),
-      cal: selectedCal.target,
-      summary: data[name].map((c) => (c.code === 'SIN_ASIGNAR' ? '—' : c.code)).join(' '),
-      time: stamp
-    }));
-    setNotifications((prev) => [...newNotifs, ...prev].slice(0, 80));
-    setPublishedByCal((prev) => ({ ...prev, [selectedCalId]: p }));
-    setSelectedPeriodIdx(p);
-    onAddAuditLog(
-      'Gerencia de Turnos', 'PUBLICAR_PERIODO', `${selectedCal.target}_${periodRangeLabel(p)}`, 'BORRADOR', 'PUBLICADA',
-      `Periodo ${periodRangeLabel(p)} (${CADENCE_LABEL[selPub.cadence]}) publicado y notificado a ${recipients.length} colaborador(es) de ${selectedCal.target}.`
-    );
-    triggerSaveToast();
-  };
-
-  const handleAdvancePeriod = () => {
-    setPeriodsElapsed((e) => e + 1);
-    setSelectedPeriodIdx(null);
-  };
-
-  // Edita la política de publicación del calendario seleccionado.
-  const updateSelectedPolicy = (patch) => {
-    setAssignments((prev) =>
-      prev.map((a) => (a.id === selectedCalId ? { ...a, pub: { ...a.pub, ...patch } } : a))
-    );
-  };
-
-  const handleWeekCellOverride = (code) => {
-    if (!activeWeekCell) return;
-    const { employee, ds } = activeWeekCell;
-    setPeriodOverrides((prev) => ({ ...prev, [`${employee}|${ds}`]: code }));
-    onAddAuditLog(
-      'Gerencia de Turnos', 'AJUSTE_BORRADOR', `${employee}_${ds}`, '—', code,
-      `Ajuste de borrador: ${employee} el ${ds} → [${code}].`
-    );
-    setActiveWeekCell(null);
-  };
 
   // ── Filtros del Roster ──
   const [searchTerm, setSearchTerm] = useState('');
@@ -548,6 +426,217 @@ export default function ShiftsCalendars({
         }
       }, (index + 1) * 650);
     });
+  };
+
+  // ── Importar/Exportar Roster desde Excel/CSV ──
+  const handleDownloadTemplate = () => {
+    try {
+      const headers = ['Empleado', ...rosterDays.map(d => fmtDate(d))];
+      
+      const rows = baseEmployees.map(emp => {
+        const empShifts = roster[emp.name]?.shifts || Array(rosterDays.length).fill('SIN_ASIGNAR');
+        return [emp.name, ...empShifts].map(val => `"${val}"`).join(',');
+      });
+      
+      const csvContent = "\uFEFF" + [headers.join(','), ...rows].join('\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", `plantilla_cuadrante_krono.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      onAddAuditLog(
+        'Plantilla Horarios',
+        'DESCARGAR_PLANTILLA_CSV',
+        'SISTEMA',
+        'N/A',
+        'CSV',
+        'Plantilla de horarios descargada para carga masiva.'
+      );
+    } catch (err) {
+      console.error("Error al descargar la plantilla:", err);
+    }
+  };
+
+  const handleUploadCSV = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    setImportError('');
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const text = event.target.result;
+        if (!text) {
+          setImportError('El archivo está vacío.');
+          return;
+        }
+        
+        const lines = text.split(/\r?\n/).filter(line => line.trim().length > 0);
+        if (lines.length === 0) {
+          setImportError('No se encontraron líneas de datos en el archivo.');
+          return;
+        }
+        
+        // Detectar delimitador (coma o punto y coma)
+        const firstLine = lines[0];
+        let delimiter = ',';
+        const commas = (firstLine.match(/,/g) || []).length;
+        const semicolons = (firstLine.match(/;/g) || []).length;
+        if (semicolons > commas) {
+          delimiter = ';';
+        }
+        
+        // Helper para separar respetando comillas
+        const parseLine = (line) => {
+          let result = [];
+          let current = '';
+          let inQuotes = false;
+          for (let i = 0; i < line.length; i++) {
+            const char = line[i];
+            if (char === '"') {
+              inQuotes = !inQuotes;
+            } else if (char === delimiter && !inQuotes) {
+              result.push(current.replace(/^["']|["']$/g, '').trim());
+              current = '';
+            } else {
+              current += char;
+            }
+          }
+          result.push(current.replace(/^["']|["']$/g, '').trim());
+          return result;
+        };
+        
+        const headers = parseLine(firstLine);
+        if (headers.length < 2 || !headers[0].toLowerCase().includes('empleado')) {
+          setImportError('Formato inválido. La primera columna debe ser el nombre del Empleado.');
+          return;
+        }
+        
+        // Mapear cabeceras de fechas a los índices del Roster actual
+        const colDateStrs = headers.slice(1);
+        const dayMappings = colDateStrs.map((dateStr) => {
+          const matchedIdx = rosterDays.findIndex(rd => fmtDate(rd) === dateStr);
+          return { dateStr, matchedIdx };
+        });
+        
+        const validShiftCodes = scheduleCatalog.map(s => s.code);
+        const previewRows = [];
+        const overridesToApply = {};
+        let totalValid = 0;
+        let totalWarnings = 0;
+        let totalErrors = 0;
+        
+        // Procesar filas de empleados
+        for (let idx = 1; idx < lines.length; idx++) {
+          const cols = parseLine(lines[idx]);
+          if (cols.length === 0 || (cols.length === 1 && cols[0] === '')) continue;
+          
+          const empName = cols[0];
+          const emp = baseEmployees.find(e => e.name.toLowerCase().trim() === empName.toLowerCase().trim());
+          
+          const rowData = {
+            name: empName,
+            department: emp ? emp.department : 'Desconocido',
+            status: 'OK',
+            shiftsCount: 0,
+            warnings: [],
+            errors: []
+          };
+          
+          if (!emp) {
+            rowData.status = 'ERROR';
+            rowData.errors.push(`Colaborador "${empName}" no está registrado en el roster de Krono.`);
+            totalErrors++;
+            previewRows.push(rowData);
+            continue;
+          }
+          
+          // Leer los turnos por fecha
+          const colShifts = cols.slice(1);
+          dayMappings.forEach((mapping, colIdx) => {
+            if (mapping.matchedIdx === -1) {
+              // La fecha de la columna no pertenece al rango actual del roster
+              return;
+            }
+            
+            const rawShift = colShifts[colIdx] || '';
+            const shiftCode = rawShift.trim().toUpperCase();
+            
+            if (!shiftCode) {
+              // Celda vacía, mapear a LIB y advertir
+              rowData.warnings.push(`${mapping.dateStr}: Celda vacía, se asignó Libre (LIB).`);
+              overridesToApply[`${emp.name}|${mapping.matchedIdx}`] = 'LIB';
+              totalWarnings++;
+            } else if (!validShiftCodes.includes(shiftCode)) {
+              // Turno no reconocido, mapear a LIB y advertir
+              rowData.warnings.push(`${mapping.dateStr}: Turno "${shiftCode}" inválido, se asignó Libre (LIB).`);
+              overridesToApply[`${emp.name}|${mapping.matchedIdx}`] = 'LIB';
+              totalWarnings++;
+              if (rowData.status !== 'ERROR') rowData.status = 'WARNING';
+            } else {
+              // Turno válido
+              overridesToApply[`${emp.name}|${mapping.matchedIdx}`] = shiftCode;
+              rowData.shiftsCount++;
+              totalValid++;
+            }
+          });
+          
+          if (rowData.warnings.length > 0 && rowData.status === 'OK') {
+            rowData.status = 'WARNING';
+          }
+          previewRows.push(rowData);
+        }
+        
+        setImportPreview({
+          rows: previewRows,
+          overridesToApply,
+          totalValid,
+          totalWarnings,
+          totalErrors,
+          fileName: file.name
+        });
+        setShowImportModal(true);
+        e.target.value = ''; // Limpiar el input para permitir recargas del mismo archivo
+      } catch (err) {
+        console.error("Error al procesar el archivo CSV:", err);
+        setImportError(`Error al procesar el archivo: ${err.message}`);
+      }
+    };
+    reader.onerror = () => {
+      setImportError('Error de lectura del archivo.');
+    };
+    reader.readAsText(file);
+  };
+
+  const handleConfirmImport = () => {
+    if (!importPreview) return;
+    
+    // Aplicar overrides al estado
+    setManualOverrides(prev => ({
+      ...prev,
+      ...importPreview.overridesToApply
+    }));
+    
+    // Registrar log en la auditoría
+    const totalEmps = importPreview.rows.filter(r => r.status !== 'ERROR').length;
+    onAddAuditLog(
+      'Importación Excel',
+      'IMPORTAR_EXCEL_CSV',
+      'ROSTER_GLOBAL',
+      'N/A',
+      'CSV_APLICADO',
+      `Importados horarios de ${totalEmps} colaboradores desde "${importPreview.fileName}". ${importPreview.totalValid} turnos asignados, ${importPreview.totalWarnings} advertencias.`
+    );
+    
+    // Cerrar modal y mostrar toast
+    setShowImportModal(false);
+    setImportPreview(null);
+    triggerSaveToast();
   };
 
   // ── Resolver Turnos Automáticos (concepto "Turno Automático" del manual) ──
@@ -713,13 +802,23 @@ export default function ShiftsCalendars({
     if (!activeCell) return;
     const { employee, dayIndex } = activeCell;
     const previousCode = roster[employee].shifts[dayIndex];
+    
+    if (isRosterPublished) {
+      setShowCellConfirmModal({ employee, dayIndex, code, previousCode });
+      setActiveCell(null);
+    } else {
+      executeCellOverride(employee, dayIndex, code, previousCode);
+    }
+  };
+
+  const executeCellOverride = (employee, dayIndex, code, previousCode) => {
     setManualOverrides((prev) => ({ ...prev, [`${employee}|${dayIndex}`]: code }));
     onAddAuditLog(
       'Supervisor de Turno', 'AJUSTE_ROSTER',
       `${employee}_JULIO_${dayIndex + 1}`, previousCode, code,
       `Ajuste manual de cuadrante: ${employee}, día ${dayIndex + 1} de Julio: [${previousCode}] → [${code}].`
     );
-    setActiveCell(null);
+    triggerSaveToast();
   };
 
   const getShiftBadgeStyle = (code) => {
@@ -829,38 +928,36 @@ export default function ShiftsCalendars({
               </div>
             </div>
           </button>
-
-          {/* Nodo OPERATIVO · Publicación Semanal */}
-          <button
-            onClick={() => setSubTab('PUBLICACION')}
-            className={`flex-1 text-left rounded-xl border p-3.5 transition-all cursor-pointer ${
-              subTab === 'PUBLICACION'
-                ? 'border-violet-300 bg-violet-50/70 shadow-sm ring-1 ring-violet-200'
-                : 'border-slate-200 bg-slate-50/40 hover:border-violet-200 hover:bg-violet-50/30'
-            }`}
-          >
-            <div className="flex items-center gap-3">
-              <span
-                className={`flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center border-2 ${
-                  subTab === 'PUBLICACION' ? 'bg-violet-600 text-white border-violet-600' : 'bg-white text-slate-400 border-slate-200'
-                }`}
-              >
-                <Send size={15} />
-              </span>
-              <div className="min-w-0">
-                <div className={`flex items-center gap-1.5 font-bold text-sm ${subTab === 'PUBLICACION' ? 'text-violet-700' : 'text-slate-700'}`}>
-                  Publicación
-                </div>
-                <div className="text-[10px] text-slate-400 font-medium uppercase tracking-wide">Anuncio periódico</div>
-              </div>
-            </div>
-          </button>
         </div>
       </div>
 
       {/* ═══════════════ RESULTADO · ROSTER OPERATIVO ═══════════════ */}
       {subTab === 'ROSTER' && (
         <div className="space-y-5">
+          {/* Encabezado del Roster con Estado de Publicación */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-1">
+            <div>
+              <h2 className="text-lg font-bold text-slate-800 tracking-tight">Planificación del Cuadrante (14 días)</h2>
+              <p className="text-xs text-slate-400 font-medium">Control operativo de turnos y descansos asignados</p>
+            </div>
+            
+            {/* Badge de Estado del Roster */}
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Estado:</span>
+              {isRosterPublished ? (
+                <span className="px-3 py-1 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-full text-xs font-bold flex items-center gap-1.5 shadow-xs">
+                  <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-ping"></span>
+                  ● Publicado y Notificado
+                </span>
+              ) : (
+                <span className="px-3 py-1 bg-amber-50 border border-amber-200 text-amber-700 rounded-full text-xs font-bold flex items-center gap-1.5 shadow-xs">
+                  <span className="w-1.5 h-1.5 bg-amber-500 rounded-full"></span>
+                  ● Borrador (Edición interna)
+                </span>
+              )}
+            </div>
+          </div>
+
           {/* Tarjetas resumen */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <SummaryCard icon={Users} color="indigo" label="Colaboradores" value={Object.keys(roster).length} />
@@ -893,7 +990,27 @@ export default function ShiftsCalendars({
               </label>
             </div>
 
-            <div className="flex gap-2 w-full lg:w-auto">
+            <div className="flex flex-wrap gap-2 w-full lg:w-auto justify-end">
+              {/* Controles de Carga Masiva (Excel) */}
+              <div className="flex border border-slate-200 rounded-lg overflow-hidden shadow-sm">
+                <button
+                  onClick={handleDownloadTemplate}
+                  className="px-3 py-2 bg-slate-50 hover:bg-slate-100 text-slate-700 font-semibold text-xs border-r border-slate-200 transition-all flex items-center gap-1.5 cursor-pointer"
+                  title="Descargar Plantilla Excel (CSV) pre-rellenada"
+                >
+                  <Download size={13} /> Plantilla
+                </button>
+                <label className="px-3 py-2 bg-white hover:bg-slate-50 text-indigo-600 font-semibold text-xs transition-all flex items-center gap-1.5 cursor-pointer relative">
+                  <Upload size={13} /> Importar Excel (CSV)
+                  <input 
+                    type="file" 
+                    accept=".csv" 
+                    onChange={handleUploadCSV} 
+                    className="absolute inset-0 opacity-0 cursor-pointer" 
+                  />
+                </label>
+              </div>
+
               <button
                 onClick={resolveAutoShifts}
                 className="px-3 py-2 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-lg text-xs transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer"
@@ -903,12 +1020,73 @@ export default function ShiftsCalendars({
               </button>
               <button
                 onClick={handleRunAutoScheduler}
-                className="flex-1 lg:flex-none px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg text-xs transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer"
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg text-xs transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 <Sparkles size={14} className="animate-pulse" /> Autoprogramar Personal
               </button>
+
+              {isRosterPublished ? (
+                <button
+                  onClick={() => {
+                    setIsRosterPublished(false);
+                    onAddAuditLog(
+                      'Supervisor de Turno', 'DESPUBLICAR_ROSTER',
+                      'ROSTER_GLOBAL', 'PUBLICADO', 'BORRADOR',
+                      'Se revirtió el cuadrante de Roster a Borrador para permitir modificaciones libres.'
+                    );
+                    triggerSaveToast();
+                  }}
+                  className="px-3.5 py-2 border border-slate-200 hover:bg-slate-50 text-slate-600 font-bold rounded-lg text-xs transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer bg-white"
+                  title="Volver a estado borrador para realizar ajustes libres"
+                >
+                  <RotateCcw size={13} /> Revertir a Borrador
+                </button>
+              ) : (
+                <button
+                  onClick={() => {
+                    setIsRosterPublished(true);
+                    onAddAuditLog(
+                      'Supervisor de Turno', 'PUBLICAR_ROSTER',
+                      'ROSTER_GLOBAL', 'BORRADOR', 'PUBLICADO',
+                      'Se publicó y notificó oficialmente el cuadrante de Roster a todos los colaboradores.'
+                    );
+                    triggerSaveToast();
+                  }}
+                  className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-lg text-xs transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer"
+                  title="Congelar turnos y simular despacho de notificaciones a los empleados"
+                >
+                  <Send size={13} /> Publicar y Notificar
+                </button>
+              )}
             </div>
           </div>
+
+          {/* Guía informativa de códigos de turno para carga masiva */}
+          <div className="bg-slate-50 border border-slate-200/60 rounded-xl p-3 flex items-start gap-2.5 text-xs text-slate-600 shadow-sm animate-in fade-in duration-200">
+            <Info size={16} className="text-indigo-600 shrink-0 mt-0.5" />
+            <div>
+              <span className="font-bold text-slate-800 block mb-0.5">Guía de Carga Masiva (Excel / CSV):</span>
+              <p className="leading-relaxed">
+                Para asignar horarios correctamente, edita las celdas de las fechas en la plantilla ingresando los códigos del catálogo de Krono:
+                {scheduleCatalog.map((s) => (
+                  <span key={s.code} className="ml-1.5 inline-block font-mono bg-white border border-slate-200 px-1.5 py-0.5 rounded text-[10px] font-bold text-slate-700 shadow-2xs">
+                    {s.code} <span className="font-normal text-slate-400">({s.type === 'DESCANSO' ? 'Libre' : s.name.split(' ')[0]})</span>
+                  </span>
+                ))}
+              </p>
+            </div>
+          </div>
+
+          {/* Alerta de Error de Importación */}
+          {importError && (
+            <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-600 font-semibold flex items-center gap-2 animate-in fade-in duration-200">
+              <AlertCircle size={15} />
+              <span>{importError}</span>
+              <button onClick={() => setImportError('')} className="ml-auto text-rose-400 hover:text-rose-600 cursor-pointer">
+                <X size={14} />
+              </button>
+            </div>
+          )}
 
           {/* Cuadrante */}
           <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm overflow-hidden">
@@ -1594,304 +1772,7 @@ export default function ShiftsCalendars({
         </div>
       )}
 
-      {/* ═══════════════ OPERATIVO · PUBLICACIÓN (genérica por calendario) ═══════════════ */}
-      {subTab === 'PUBLICACION' && (
-        <div className="space-y-5">
-          {publishableCals.length === 0 ? (
-            <div className="bg-white border border-slate-200/80 rounded-xl p-8 text-center">
-              <CalendarCheck size={32} className="mx-auto text-slate-300 mb-3" />
-              <h3 className="font-bold text-slate-700 text-sm">No hay calendarios con publicación periódica</h3>
-              <p className="text-[11px] text-slate-400 mt-1 max-w-md mx-auto">
-                Los calendarios fijos son permanentes y no se anuncian. Para activar el ciclo de publicación, asigna un ciclo
-                <b> ROTATIVO</b> con política <b>Periódica</b> en la etapa Calendarios.
-              </p>
-            </div>
-          ) : (
-            <>
-              {/* Selector de calendario + editor de POLÍTICA + simular */}
-              <div className="bg-white border border-slate-200/80 rounded-xl p-4 shadow-sm space-y-3">
-                <div className="flex flex-col lg:flex-row lg:items-end gap-3 justify-between">
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 flex-1 text-xs font-semibold text-slate-600">
-                    <div className="space-y-1 col-span-2 sm:col-span-1">
-                      <label className="block text-[10px] text-slate-400 uppercase tracking-wide">Calendario a planificar</label>
-                      <select
-                        value={selectedCalId}
-                        onChange={(e) => { setSelectedCalId(e.target.value); setSelectedPeriodIdx(null); }}
-                        className="w-full px-2.5 py-2 border rounded-lg focus:ring-1 focus:ring-violet-500"
-                      >
-                        {publishableCals.map((c) => (
-                          <option key={c.id} value={c.id}>{c.target} ({c.mode === 'DEPARTAMENTO' ? 'Depto' : 'Indiv'})</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="space-y-1">
-                      <label className="block text-[10px] text-slate-400 uppercase tracking-wide">Cadencia</label>
-                      <select
-                        value={selPub.cadence}
-                        onChange={(e) => updateSelectedPolicy({ cadence: e.target.value })}
-                        className="w-full px-2.5 py-2 border rounded-lg focus:ring-1 focus:ring-violet-500"
-                      >
-                        <option value="SEMANAL">Semanal (7d)</option>
-                        <option value="QUINCENAL">Quincenal (14d)</option>
-                        <option value="MENSUAL">Mensual (30d)</option>
-                      </select>
-                    </div>
-                    <div className="space-y-1">
-                      <label className="block text-[10px] text-slate-400 uppercase tracking-wide">Día de aviso</label>
-                      <select
-                        value={selPub.noticeDay}
-                        onChange={(e) => updateSelectedPolicy({ noticeDay: parseInt(e.target.value) })}
-                        className="w-full px-2.5 py-2 border rounded-lg focus:ring-1 focus:ring-violet-500"
-                      >
-                        {DAY_NAMES.map((d, i) => (<option key={i} value={i}>{d}</option>))}
-                      </select>
-                    </div>
-                    <div className="space-y-1">
-                      <label className="block text-[10px] text-slate-400 uppercase tracking-wide">Periodos adelantados</label>
-                      <input
-                        type="number" min="1" max="6" value={selPub.lead}
-                        onChange={(e) => updateSelectedPolicy({ lead: Math.max(1, parseInt(e.target.value) || 1) })}
-                        className="w-full px-2.5 py-2 border rounded-lg focus:ring-1 focus:ring-violet-500 font-bold"
-                      />
-                    </div>
-                  </div>
-                  <button
-                    onClick={handleAdvancePeriod}
-                    className="px-3.5 py-2 bg-white border border-violet-200 text-violet-700 font-bold rounded-lg text-xs hover:bg-violet-50 transition-all flex items-center gap-1.5 cursor-pointer shadow-xs whitespace-nowrap"
-                    title="Simula el paso del tiempo: el horizonte rueda un periodo"
-                  >
-                    <RotateCcw size={13} /> Simular próximo aviso
-                  </button>
-                </div>
-                <div className="text-[11px] text-slate-500 font-medium bg-violet-50/60 border border-violet-100 rounded-lg px-3 py-2 flex items-center gap-2">
-                  <CalendarCheck size={14} className="text-violet-500 flex-shrink-0" />
-                  <span>
-                    Política de <b className="text-violet-700">{selectedCal.target}</b>: aviso cada <b>{CADENCE_LABEL[selPub.cadence].toLowerCase()}</b> los <b>{DAY_NAMES[selPub.noticeDay]}</b>, publicando <b>{selPub.lead}</b> periodo(s) por adelantado.
-                  </span>
-                </div>
-              </div>
 
-              {/* Horizonte de periodos */}
-              {(() => {
-                const pop = calPopulation(selectedCal);
-                return (
-                  <>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                      {Array.from({ length: 4 }, (_, k) => periodsElapsed + k).map((p) => {
-                        const state = periodStateOf(p);
-                        const cov = periodCoverage(p, pop);
-                        const meta = {
-                          CERRADA: { label: 'CERRADA', cls: 'bg-slate-100 text-slate-400 border-slate-200', icon: Lock },
-                          EN_CURSO: { label: 'EN CURSO', cls: 'bg-slate-100 text-slate-600 border-slate-300', icon: Lock },
-                          PUBLICADA: { label: 'PUBLICADA', cls: 'bg-violet-600 text-white border-violet-600', icon: CheckCircle },
-                          BORRADOR: { label: 'BORRADOR', cls: 'bg-white text-violet-700 border-violet-400 border-dashed', icon: PenLine },
-                          PROYECTADA: { label: 'PROYECTADA', cls: 'bg-slate-50 text-slate-400 border-slate-200 border-dashed', icon: Sparkles }
-                        }[state];
-                        const StIcon = meta.icon;
-                        const isSelected = selectedPeriodResolved === p;
-                        return (
-                          <button
-                            key={p}
-                            onClick={() => setSelectedPeriodIdx(p)}
-                            className={`text-left rounded-xl border bg-white p-3.5 space-y-2.5 transition-all cursor-pointer ${
-                              isSelected ? 'border-violet-400 ring-1 ring-violet-200 shadow-sm' : 'border-slate-200 hover:border-violet-200'
-                            }`}
-                          >
-                            <div className="flex justify-between items-start gap-1">
-                              <div>
-                                <div className="text-[9px] font-bold text-slate-400 uppercase tracking-wide">{periodRelLabel(p)}</div>
-                                <div className="text-xs font-bold text-slate-700 font-mono">{periodRangeLabel(p)}</div>
-                              </div>
-                              <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border flex items-center gap-1 whitespace-nowrap ${meta.cls}`}>
-                                <StIcon size={9} /> {meta.label}
-                              </span>
-                            </div>
-                            <div className="flex flex-wrap gap-1 pt-1 border-t border-slate-100">
-                              {Object.keys(cov).filter((c) => c !== 'LIB' && c !== 'SIN_ASIGNAR').length === 0 ? (
-                                <span className="text-[9px] text-slate-300 font-semibold">Sin cobertura</span>
-                              ) : (
-                                Object.keys(cov)
-                                  .filter((c) => c !== 'LIB' && c !== 'SIN_ASIGNAR')
-                                  .map((c) => (
-                                    <span key={c} className={`text-[8.5px] font-mono font-bold px-1 py-0.5 rounded border ${getShiftBadgeStyle(c)}`}>
-                                      {c}·{cov[c]}
-                                    </span>
-                                  ))
-                              )}
-                            </div>
-                            {state === 'BORRADOR' && (
-                              <button
-                                onClick={(e) => { e.stopPropagation(); handlePublishPeriod(); }}
-                                className="w-full py-1.5 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-[10px] font-bold flex items-center justify-center gap-1 cursor-pointer"
-                              >
-                                <Send size={11} /> Publicar + Notificar
-                              </button>
-                            )}
-                          </button>
-                        );
-                      })}
-                    </div>
-
-                    {/* Detalle del periodo seleccionado + feed de avisos */}
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-                      <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200/80 shadow-sm overflow-hidden">
-                        {(() => {
-                          const pState = periodStateOf(selectedPeriodResolved);
-                          const editable = pState === 'BORRADOR';
-                          const data = buildPeriod(selectedPeriodResolved, pop);
-                          const days = periodDaysOf(selectedPeriodResolved);
-                          return (
-                            <>
-                              <div className="flex justify-between items-center p-4 border-b border-slate-100">
-                                <div>
-                                  <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2">
-                                    {periodRelLabel(selectedPeriodResolved)}
-                                    <span className="text-[10px] text-slate-400 font-mono font-semibold">{periodRangeLabel(selectedPeriodResolved)}</span>
-                                  </h3>
-                                  <p className="text-[10px] font-semibold mt-0.5 flex items-center gap-1">
-                                    {editable ? (
-                                      <span className="text-violet-600 flex items-center gap-1"><PenLine size={11} /> Borrador editable — ajusta antes de publicar</span>
-                                    ) : pState === 'PUBLICADA' ? (
-                                      <span className="text-emerald-600 flex items-center gap-1"><Lock size={11} /> Publicado y notificado — bloqueado</span>
-                                    ) : pState === 'EN_CURSO' ? (
-                                      <span className="text-slate-500 flex items-center gap-1"><Lock size={11} /> En ejecución — bloqueado</span>
-                                    ) : (
-                                      <span className="text-slate-400 flex items-center gap-1"><Sparkles size={11} /> Proyección de la rotación — aún no es borrador</span>
-                                    )}
-                                  </p>
-                                </div>
-                                {editable && (
-                                  <button
-                                    onClick={handlePublishPeriod}
-                                    className="px-3 py-1.5 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-[11px] font-bold flex items-center gap-1.5 cursor-pointer shadow-xs"
-                                  >
-                                    <Send size={12} /> Publicar Periodo
-                                  </button>
-                                )}
-                              </div>
-                              <div className="overflow-x-auto">
-                                <table className="w-full text-left border-collapse text-xs select-none">
-                                  <thead>
-                                    <tr className="bg-slate-50/80 border-b border-slate-100 text-slate-400 font-bold uppercase tracking-wider text-center">
-                                      <th className="py-3 px-4 text-left" style={{ minWidth: '150px' }}>Empleado</th>
-                                      {days.map((d, i) => {
-                                        const weekend = d.getDay() === 0 || d.getDay() === 6;
-                                        return (
-                                          <th key={i} className={`py-3 px-1 border-l ${weekend ? 'bg-slate-100/60' : ''}`} style={{ minWidth: '50px' }}>
-                                            <div className="font-mono text-slate-700">{d.getDate()}</div>
-                                            <div className="text-[9px] text-slate-400">{d.toLocaleString('es-ES', { weekday: 'short' }).substring(0, 3)}</div>
-                                          </th>
-                                        );
-                                      })}
-                                    </tr>
-                                  </thead>
-                                  <tbody className="divide-y divide-slate-100 text-slate-600 font-semibold">
-                                    {Object.keys(data).length === 0 ? (
-                                      <tr><td colSpan={days.length + 1} className="text-center py-8 text-slate-400 font-medium">Este calendario no cubre a ningún colaborador.</td></tr>
-                                    ) : (
-                                      Object.keys(data).map((empName) => (
-                                        <tr key={empName} className="hover:bg-slate-50/30">
-                                          <td className="py-3 px-4">
-                                            <span className="font-bold text-slate-800 block text-xs">{empName}</span>
-                                            <span className="text-[10px] text-slate-400 block">{roster[empName]?.department}</span>
-                                          </td>
-                                          {data[empName].map(({ ds, code }, idx) => {
-                                            const isSel = activeWeekCell && activeWeekCell.employee === empName && activeWeekCell.ds === ds;
-                                            const isEdited = periodOverrides[`${empName}|${ds}`] !== undefined;
-                                            return (
-                                              <td
-                                                key={idx}
-                                                onClick={() => editable && setActiveWeekCell({ employee: empName, ds })}
-                                                className={`py-3 px-1 border-l text-center relative ${editable ? 'cursor-pointer hover:bg-violet-50/40' : 'cursor-default'} ${isSel ? 'bg-violet-50 ring-2 ring-violet-500/20' : ''}`}
-                                              >
-                                                <span className={`w-9 py-1 rounded font-bold font-mono text-[10px] inline-block border text-center ${getShiftBadgeStyle(code)} ${isEdited ? 'ring-1 ring-violet-400' : ''}`}>
-                                                  {code === 'SIN_ASIGNAR' ? 'S/A' : code}
-                                                </span>
-                                                {isSel && (
-                                                  <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1.5 bg-white border border-slate-200 rounded-lg shadow-2xl z-50 p-2 space-y-1.5 w-40 text-left">
-                                                    <div className="text-[9px] font-bold text-slate-400 uppercase text-center border-b pb-1">Ajustar Borrador</div>
-                                                    <div className="grid grid-cols-2 gap-1 text-[10px] font-bold">
-                                                      {scheduleCatalog.map((sc) => (
-                                                        <button
-                                                          key={sc.code}
-                                                          onClick={(e) => { e.stopPropagation(); handleWeekCellOverride(sc.code); }}
-                                                          className={`py-1 rounded font-bold font-mono border hover:scale-105 transition-transform ${sc.bg}`}
-                                                          title={sc.name}
-                                                        >
-                                                          {sc.code}
-                                                        </button>
-                                                      ))}
-                                                    </div>
-                                                  </div>
-                                                )}
-                                              </td>
-                                            );
-                                          })}
-                                        </tr>
-                                      ))
-                                    )}
-                                  </tbody>
-                                </table>
-                              </div>
-                            </>
-                          );
-                        })()}
-                      </div>
-
-                      {/* Feed de notificaciones */}
-                      <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm p-4 space-y-3">
-                        <h3 className="font-bold text-slate-800 text-sm pb-3 border-b border-slate-100 flex items-center gap-2">
-                          <Bell size={16} className="text-violet-500" /> Avisos Despachados
-                          {notifications.length > 0 && (
-                            <span className="ml-auto text-[10px] bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full font-bold">{notifications.length}</span>
-                          )}
-                        </h3>
-                        {notifications.length === 0 ? (
-                          <div className="text-center py-10 text-slate-300">
-                            <Send size={28} className="mx-auto mb-2" />
-                            <p className="text-[11px] font-semibold text-slate-400">Aún no has publicado ningún periodo.</p>
-                            <p className="text-[10px] text-slate-300 mt-1">Al publicar, cada empleado recibe su horario aquí.</p>
-                          </div>
-                        ) : (
-                          <div className="space-y-2 max-h-[460px] overflow-y-auto pr-1">
-                            {notifications.map((n) => (
-                              <div key={n.id} className="bg-slate-50/70 border border-slate-100 rounded-lg p-2.5 text-[11px]">
-                                <div className="flex justify-between items-center">
-                                  <span className="font-bold text-slate-700">{n.employee}</span>
-                                  <span className="text-[9px] text-slate-400 font-mono">{n.time}</span>
-                                </div>
-                                <div className="text-[9px] text-slate-400 font-medium mb-1">{n.cal} · {n.week} · notificado</div>
-                                <div className="font-mono text-[10px] text-slate-600 bg-white border border-slate-100 rounded px-1.5 py-1 tracking-tight">{n.summary}</div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </>
-                );
-              })()}
-
-              {/* Calendarios fijos / permanentes (no se publican) */}
-              {fixedCals.length > 0 && (
-                <div className="bg-slate-50 border border-slate-200/60 rounded-xl p-4">
-                  <h4 className="text-[11px] font-bold text-slate-500 uppercase tracking-wide flex items-center gap-1.5 mb-2">
-                    <Lock size={12} /> Calendarios fijos · permanentes (no requieren publicación)
-                  </h4>
-                  <div className="flex flex-wrap gap-2">
-                    {fixedCals.map((c) => (
-                      <span key={c.id} className="bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold text-slate-600 flex items-center gap-1.5">
-                        <span className={`text-[8px] font-bold px-1 py-0.5 rounded border ${FAMILY_META.FIJO.cls}`}>FIJO</span>
-                        {c.target}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </>
-          )}
-        </div>
-      )}
 
       {/* ═══════════════ MODAL · AUTOSCHEDULER ═══════════════ */}
       {showSchedulerModal && (
@@ -1924,6 +1805,202 @@ export default function ShiftsCalendars({
                 className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-800 text-white rounded font-bold cursor-pointer disabled:cursor-not-allowed text-xs transition-all"
               >
                 {autoScheduling ? 'Procesando Roster...' : 'Cerrar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* ═══════════════ MODAL · VISTA PREVIA IMPORTACIÓN ═══════════════ */}
+      {showImportModal && importPreview && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-2xl rounded-2xl border border-slate-200 shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-200">
+            {/* Cabecera */}
+            <div className="p-5 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 flex items-center gap-1.5">
+                  <FileText size={16} className="text-indigo-600" />
+                  Vista Previa de Importación de Horarios
+                </h3>
+                <p className="text-[11px] text-slate-500 mt-0.5">Archivo: {importPreview.fileName}</p>
+              </div>
+              <button 
+                onClick={() => { setShowImportModal(false); setImportPreview(null); }} 
+                className="text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Resumen de Validaciones */}
+            <div className="p-5 bg-white border-b border-slate-100 grid grid-cols-3 gap-3">
+              <div className="p-3 bg-emerald-50/60 border border-emerald-100 rounded-xl">
+                <div className="text-lg font-bold text-emerald-700">{importPreview.totalValid}</div>
+                <div className="text-[10px] text-emerald-600 font-semibold uppercase tracking-wide">Turnos Válidos</div>
+              </div>
+              <div className="p-3 bg-amber-50/60 border border-amber-100 rounded-xl">
+                <div className="text-lg font-bold text-amber-700">{importPreview.totalWarnings}</div>
+                <div className="text-[10px] text-amber-600 font-semibold uppercase tracking-wide">Advertencias</div>
+              </div>
+              <div className="p-3 bg-rose-50/60 border border-rose-100 rounded-xl">
+                <div className="text-lg font-bold text-rose-700">{importPreview.totalErrors}</div>
+                <div className="text-[10px] text-rose-600 font-semibold uppercase tracking-wide">Errores</div>
+              </div>
+            </div>
+
+            {/* Advertencia si el Roster está Publicado */}
+            {isRosterPublished && (
+              <div className="mx-5 mt-3 p-3 bg-amber-50 border border-amber-200 rounded-xl text-[11px] text-amber-800 font-semibold flex items-start gap-2 shadow-2xs">
+                <AlertTriangle size={15} className="text-amber-600 shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-bold text-amber-900 block mb-0.5">⚠️ Roster Oficial Publicado:</span>
+                  El cuadrante ya está publicado. Al confirmar la importación, se aplicarán cambios inmediatos sobre turnos oficiales y se notificará automáticamente a los empleados correspondientes.
+                </div>
+              </div>
+            )}
+
+            {/* Listado de colaboradores */}
+            <div className="flex-1 overflow-y-auto p-5 space-y-3 bg-slate-50/30">
+              <div className="text-xs font-bold text-slate-700 mb-2">Detalle de Colaboradores</div>
+              {importPreview.rows.map((row, i) => (
+                <div 
+                  key={i} 
+                  className={`p-3.5 rounded-xl border flex flex-col gap-1.5 transition-all bg-white shadow-sm ${
+                    row.status === 'ERROR' 
+                      ? 'border-rose-200 hover:border-rose-300' 
+                      : row.status === 'WARNING' 
+                        ? 'border-amber-200 hover:border-amber-300' 
+                        : 'border-slate-200 hover:border-slate-300'
+                  }`}
+                >
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <span className="font-bold text-slate-800 text-xs block">{row.name}</span>
+                      <span className="text-[10px] text-slate-400 font-semibold block">{row.department}</span>
+                    </div>
+                    <div>
+                      {row.status === 'ERROR' && (
+                        <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-rose-100 text-rose-800 border border-rose-200">
+                          Ignorar / Error
+                        </span>
+                      )}
+                      {row.status === 'WARNING' && (
+                        <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                          Advertencia
+                        </span>
+                      )}
+                      {row.status === 'OK' && (
+                        <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                          Listo
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Mensajes de error/advertencia */}
+                  {row.errors.length > 0 && (
+                    <div className="space-y-1 mt-1">
+                      {row.errors.map((msg, idx) => (
+                        <div key={idx} className="text-[10px] text-rose-600 font-medium flex items-center gap-1">
+                          <AlertCircle size={10} />
+                          <span>{msg}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {row.warnings.length > 0 && (
+                    <div className="space-y-1 mt-1 border-t border-slate-100 pt-1.5">
+                      {row.warnings.map((msg, idx) => (
+                        <div key={idx} className="text-[10px] text-amber-700 font-medium flex items-center gap-1">
+                          <AlertTriangle size={10} />
+                          <span>{msg}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {row.status === 'OK' && (
+                    <div className="text-[10px] text-emerald-600 font-medium flex items-center gap-1 mt-1 border-t border-slate-100 pt-1.5">
+                      <Check size={11} />
+                      <span>{row.shiftsCount} turnos válidos leídos y listos para aplicar.</span>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Footer */}
+            <div className="p-5 border-t border-slate-100 bg-slate-50/50 flex justify-between items-center">
+              <span className="text-[10px] text-slate-500 font-medium">
+                {importPreview.totalErrors > 0 
+                  ? `* Se ignorarán ${importPreview.totalErrors} fila(s) con error.` 
+                  : '✓ Todo el personal validado correctamente.'}
+              </span>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => { setShowImportModal(false); setImportPreview(null); }}
+                  className="px-3.5 py-2 border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-lg text-xs font-bold transition-all cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleConfirmImport}
+                  disabled={importPreview.totalValid === 0}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-200 text-white disabled:text-slate-400 font-bold rounded-lg text-xs transition-all shadow-md flex items-center gap-1.5 cursor-pointer disabled:cursor-not-allowed"
+                >
+                  <CheckCircle size={13} /> Confirmar y Aplicar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════ MODAL · CONFIRMAR EDICIÓN DE CELDA PUBLICADA ═══════════════ */}
+      {showCellConfirmModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-md rounded-2xl border border-slate-200 shadow-2xl p-5 space-y-4 animate-in zoom-in-95 duration-200">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-full bg-amber-50 border border-amber-100 flex items-center justify-center text-amber-600 shrink-0">
+                <AlertTriangle size={20} />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-sm font-bold text-slate-900">¿Modificar turno publicado?</h3>
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  Este cuadrante ya fue publicado y notificado a los empleados. Modificar manualmente el turno de 
+                  <strong> {showCellConfirmModal.employee} </strong> (Día {showCellConfirmModal.dayIndex + 1} de Julio) de 
+                  <span className="font-mono font-bold mx-1 text-slate-700 bg-slate-100 px-1 py-0.5 rounded text-[10px]">
+                    {showCellConfirmModal.previousCode === 'SIN_ASIGNAR' ? 'S/A' : showCellConfirmModal.previousCode}
+                  </span> 
+                  a 
+                  <span className="font-mono font-bold mx-1 text-indigo-700 bg-indigo-50 px-1 py-0.5 rounded text-[10px]">
+                    {showCellConfirmModal.code === 'SIN_ASIGNAR' ? 'S/A' : showCellConfirmModal.code}
+                  </span> 
+                  enviará una notificación de alerta automática para informarle del cambio retroactivo de su horario.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                onClick={() => setShowCellConfirmModal(null)}
+                className="px-3.5 py-2 border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-lg text-xs font-bold transition-all cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => {
+                  executeCellOverride(
+                    showCellConfirmModal.employee, 
+                    showCellConfirmModal.dayIndex, 
+                    showCellConfirmModal.code, 
+                    showCellConfirmModal.previousCode
+                  );
+                  setShowCellConfirmModal(null);
+                }}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg text-xs transition-all shadow-md cursor-pointer"
+              >
+                Sí, aplicar cambio
               </button>
             </div>
           </div>

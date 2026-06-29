@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
-  QrCode, Clock, Wifi, ShieldAlert, CheckCircle, RefreshCw, Smartphone, 
-  MapPin, ShieldCheck, Play, HelpCircle
+  Wifi, ShieldAlert, CheckCircle, RefreshCw, Smartphone, 
+  MapPin, ShieldCheck, Play, HelpCircle, X, Eye, EyeOff, AlertTriangle
 } from 'lucide-react';
 
 export default function DigitalClockIn({ onAddAuditLog, onClockInStaff }) {
@@ -15,10 +15,26 @@ export default function DigitalClockIn({ onAddAuditLog, onClockInStaff }) {
   ]);
 
   // Estados de Zero-Touch
-  const [zeroTouchProgress, setZeroTouchProgress] = useState('IDLE'); // IDLE, DETECTING, WI_FI_OK, GPS_OK, BIOMETRIC_PROMPT, SUCCESS
+  const [zeroTouchProgress, setZeroTouchProgress] = useState('IDLE'); // IDLE, DETECTING, WI_FI_OK, GPS_OK, BIOMETRIC_PROMPT, SUCCESS, ERROR_WIFI, ERROR_GPS
   const [detectedBSSID, setDetectedBSSID] = useState('Desconocido');
   const [detectedGPS, setDetectedGPS] = useState('--');
   const [detectedDistance, setDetectedDistance] = useState('--');
+
+  // Modos de fallo para Zero-Touch (Heurística 5)
+  const [wifiFailMode, setWifiFailMode] = useState(false);
+  const [gpsFailMode, setGpsFailMode] = useState(false);
+
+  // Guardar referencias a los timeouts para poder cancelar (Heurística 3)
+  const timeoutsRef = useRef([]);
+
+  // Estados de Marcaje Manual de Emergencia (Heurística 7)
+  const [selectedStaff, setSelectedStaff] = useState('Juan Pérez');
+  const [manualPin, setManualPin] = useState('');
+  const [manualResult, setManualResult] = useState(null); // { success: boolean, message: string }
+  const [showPin, setShowPin] = useState(false);
+
+  // FAQs desplegables (Heurística 10)
+  const [activeFaq, setActiveFaq] = useState(null);
 
   // Constantes de Reglas
   const allowedBSSID = '00:1A:2B:3C:4D:5E';
@@ -37,8 +53,16 @@ export default function DigitalClockIn({ onAddAuditLog, onClockInStaff }) {
       });
     }, 1000);
 
-    return () => clearInterval(timer);
+    return () => {
+      clearInterval(timer);
+      clearAllSimTimeouts();
+    };
   }, []);
+
+  const clearAllSimTimeouts = () => {
+    timeoutsRef.current.forEach(t => clearTimeout(t));
+    timeoutsRef.current = [];
+  };
 
   const handleSimulateQrScan = () => {
     const names = ["Camila Silva", "Carlos Díaz", "Lucía Fernández", "Alejandro Ruiz"];
@@ -68,25 +92,42 @@ export default function DigitalClockIn({ onAddAuditLog, onClockInStaff }) {
     );
   };
 
+  // Simulación Zero-Touch con control de fallos y abortado (Heurística 3 y 5)
   const runZeroTouchSimulation = () => {
+    clearAllSimTimeouts();
     setZeroTouchProgress('DETECTING');
-    setDetectedBSSID('Desconocido');
+    setDetectedBSSID('Buscando...');
     setDetectedGPS('--');
     setDetectedDistance('--');
 
-    setTimeout(() => {
+    // Paso 1: Wi-Fi
+    const t1 = setTimeout(() => {
+      if (wifiFailMode) {
+        setDetectedBSSID('Linksys-Guest (No permitido)');
+        setZeroTouchProgress('ERROR_WIFI');
+        return;
+      }
       setDetectedBSSID(allowedBSSID);
       setZeroTouchProgress('WI_FI_OK');
       
-      setTimeout(() => {
-        setDetectedGPS('8.4m');
-        setDetectedDistance('12.3m');
+      // Paso 2: GPS
+      const t2 = setTimeout(() => {
+        if (gpsFailMode) {
+          setDetectedGPS('32.5m (Pobre)');
+          setDetectedDistance('158.4m (Fuera del rango)');
+          setZeroTouchProgress('ERROR_GPS');
+          return;
+        }
+        setDetectedGPS('8.4m (Excelente)');
+        setDetectedDistance('12.3m (En rango)');
         setZeroTouchProgress('GPS_OK');
         
-        setTimeout(() => {
+        // Paso 3: FaceID
+        const t3 = setTimeout(() => {
           setZeroTouchProgress('BIOMETRIC_PROMPT');
           
-          setTimeout(() => {
+          // Paso 4: Final exitoso
+          const t4 = setTimeout(() => {
             setZeroTouchProgress('SUCCESS');
             const targetName = "María Gómez";
             onClockInStaff(targetName, "Presencia Zero-Touch");
@@ -99,13 +140,55 @@ export default function DigitalClockIn({ onAddAuditLog, onClockInStaff }) {
               'Presencia ambiental Zero-Touch verificada. Firma FaceID local validada en Enclave Seguro.'
             );
           }, 2000);
+          timeoutsRef.current.push(t4);
         }, 1500);
+        timeoutsRef.current.push(t3);
       }, 1500);
+      timeoutsRef.current.push(t2);
     }, 1500);
+    timeoutsRef.current.push(t1);
+  };
+
+  const handleAbortSimulation = () => {
+    clearAllSimTimeouts();
+    setZeroTouchProgress('IDLE');
+    setDetectedBSSID('Desconocido');
+    setDetectedGPS('--');
+    setDetectedDistance('--');
+  };
+
+  // Validación de Marcaje Manual de Emergencia (Heurística 7 y 9)
+  const handleManualClockIn = (e) => {
+    e.preventDefault();
+    if (!manualPin.trim()) {
+      setManualResult({ success: false, message: 'Ingrese su código PIN de 4 dígitos.' });
+      return;
+    }
+
+    // Aceptamos 1234 y 9999 como PIN de demo (Heurística 5: Ayuda con indicaciones claras)
+    if (manualPin === '1234' || manualPin === '9999') {
+      onClockInStaff(selectedStaff, "PIN de Emergencia");
+      onAddAuditLog(
+        selectedStaff, 
+        'REGISTRO_ENTRADA', 
+        'OTP_MANUAL_GATEWAY', 
+        'AUSENTE', 
+        'PRESENTE', 
+        `Marcaje de emergencia autorizado mediante PIN de un solo uso por supervisor de TI.`
+      );
+      setManualResult({ success: true, message: `¡Registro exitoso! Bienvenido ${selectedStaff}.` });
+      setManualPin('');
+    } else {
+      setManualResult({ 
+        success: false, 
+        message: 'Código PIN incorrecto o expirado. (Pista de prueba: ingresa 1234 o 9999).' 
+      });
+    }
   };
 
   return (
     <div className="space-y-8 animate-in fade-in duration-300">
+      
       {/* Cabecera */}
       <div>
         <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Vectores de Marcaje Digital</h1>
@@ -117,9 +200,14 @@ export default function DigitalClockIn({ onAddAuditLog, onClockInStaff }) {
         {/* VECTOR A: TOTP-QR */}
         <div className="bg-white p-6 rounded-xl border border-slate-200/80 shadow-sm space-y-6 flex flex-col justify-between">
           <div className="space-y-1">
-            <span className="text-[10px] bg-indigo-50 border border-indigo-100 text-indigo-700 px-2.5 py-0.5 rounded-full font-bold uppercase">
-              Vector Alfa
-            </span>
+            <div className="flex justify-between items-start">
+              <span className="text-[10px] bg-indigo-50 border border-indigo-100 text-indigo-700 px-2.5 py-0.5 rounded-full font-bold uppercase">
+                Vector Alfa
+              </span>
+              <span className="text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-full font-bold flex items-center gap-1.5 shadow-xs">
+                <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span> Gateway Activo
+              </span>
+            </div>
             <h3 className="text-lg font-bold text-slate-800">Marcaje por TOTP-QR Dinámico</h3>
             <p className="text-xs text-slate-400">Código QR rotativo HMAC-SHA256 proyectado en accesos de oficinas o en tabletas de control local.</p>
           </div>
@@ -251,54 +339,92 @@ export default function DigitalClockIn({ onAddAuditLog, onClockInStaff }) {
             </div>
           </div>
 
+          {/* Configuración de Errores para Simulación (Heurística 5: Prevención de errores) */}
+          <div className="bg-amber-50/50 border border-amber-100 p-3.5 rounded-xl text-xs space-y-2 text-amber-900">
+            <div className="font-bold flex items-center gap-1"><AlertTriangle size={14} className="text-amber-600" /> Interruptor de Condiciones Especiales (Pruebas)</div>
+            <div className="flex gap-4">
+              <label className="flex items-center gap-2 font-semibold cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={wifiFailMode}
+                  onChange={(e) => { setWifiFailMode(e.target.checked); handleAbortSimulation(); }}
+                  className="rounded text-indigo-600 focus:ring-indigo-500"
+                />
+                Forzar Fallo Wi-Fi
+              </label>
+              <label className="flex items-center gap-2 font-semibold cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={gpsFailMode}
+                  onChange={(e) => { setGpsFailMode(e.target.checked); handleAbortSimulation(); }}
+                  className="rounded text-indigo-600 focus:ring-indigo-500"
+                />
+                Forzar Fallo GPS / Distancia
+              </label>
+            </div>
+          </div>
+
           {/* Simulador */}
           <div className="bg-slate-50/50 border border-slate-100 rounded-xl p-5 space-y-4">
             <div className="flex justify-between items-center">
-              <span className="text-xs font-bold text-slate-700">PRUEBA DE BALIZAS Y GEOLOCALIZACIÓN</span>
-              <button
-                onClick={runZeroTouchSimulation}
-                disabled={zeroTouchProgress === 'DETECTING' || zeroTouchProgress === 'WI_FI_OK' || zeroTouchProgress === 'GPS_OK' || zeroTouchProgress === 'BIOMETRIC_PROMPT'}
-                className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-200 text-white rounded text-xs font-bold transition-all flex items-center gap-1 cursor-pointer disabled:cursor-not-allowed"
-              >
-                <Play size={12} /> {zeroTouchProgress === 'IDLE' ? 'Iniciar Comprobación' : zeroTouchProgress === 'SUCCESS' ? 'Volver a Evaluar' : 'Ejecutando...'}
-              </button>
+              <span className="text-xs font-bold text-slate-700">BALIZAS Y GEOLOCALIZACIÓN</span>
+              <div className="flex gap-2">
+                {/* Botón Detener / Cancelar (Heurística 3: Libertad del usuario) */}
+                {['DETECTING', 'WI_FI_OK', 'GPS_OK', 'BIOMETRIC_PROMPT'].includes(zeroTouchProgress) && (
+                  <button
+                    onClick={handleAbortSimulation}
+                    className="px-3 py-1.5 border border-slate-350 hover:bg-slate-100 text-slate-600 rounded text-xs font-bold transition-all cursor-pointer"
+                  >
+                    Detener
+                  </button>
+                )}
+                <button
+                  onClick={runZeroTouchSimulation}
+                  disabled={['DETECTING', 'WI_FI_OK', 'GPS_OK', 'BIOMETRIC_PROMPT'].includes(zeroTouchProgress)}
+                  className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-200 text-white rounded text-xs font-bold transition-all flex items-center gap-1 cursor-pointer disabled:cursor-not-allowed"
+                >
+                  <Play size={12} /> {zeroTouchProgress === 'IDLE' ? 'Evaluar Presencia' : ['ERROR_WIFI', 'ERROR_GPS', 'SUCCESS'].includes(zeroTouchProgress) ? 'Re-evaluar' : 'Buscando...'}
+                </button>
+              </div>
             </div>
 
             <div className="space-y-3.5 text-xs font-semibold">
               {/* Check 1 */}
               <div className="flex items-center justify-between p-2 bg-white rounded border">
                 <div className="flex items-center gap-2">
-                  <Wifi size={14} className={zeroTouchProgress !== 'IDLE' && zeroTouchProgress !== 'DETECTING' ? "text-indigo-600" : "text-slate-400"} />
-                  <span className="text-slate-600">Escaneo y Coincidencia de Red BSSID</span>
+                  <Wifi size={14} className={!['IDLE', 'DETECTING'].includes(zeroTouchProgress) ? "text-indigo-600" : "text-slate-400"} />
+                  <span className="text-slate-600">Escaneo Wi-Fi BSSID</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="font-mono text-slate-500">BSSID: {detectedBSSID}</span>
                   {zeroTouchProgress === 'DETECTING' && <RefreshCw size={12} className="animate-spin text-slate-400" />}
-                  {(zeroTouchProgress === 'WI_FI_OK' || zeroTouchProgress === 'GPS_OK' || zeroTouchProgress === 'BIOMETRIC_PROMPT' || zeroTouchProgress === 'SUCCESS') && <CheckCircle size={14} className="text-emerald-500" />}
+                  {['WI_FI_OK', 'GPS_OK', 'BIOMETRIC_PROMPT', 'SUCCESS'].includes(zeroTouchProgress) && <CheckCircle size={14} className="text-emerald-500" />}
+                  {zeroTouchProgress === 'ERROR_WIFI' && <X size={14} className="text-rose-500 font-extrabold" />}
                 </div>
               </div>
 
               {/* Check 2 */}
               <div className="flex items-center justify-between p-2 bg-white rounded border">
                 <div className="flex items-center gap-2">
-                  <MapPin size={14} className={zeroTouchProgress === 'GPS_OK' || zeroTouchProgress === 'BIOMETRIC_PROMPT' || zeroTouchProgress === 'SUCCESS' ? "text-indigo-600" : "text-slate-400"} />
-                  <span className="text-slate-600">Precisión GPS y Distancia Geocerca</span>
+                  <MapPin size={14} className={['GPS_OK', 'BIOMETRIC_PROMPT', 'SUCCESS'].includes(zeroTouchProgress) ? "text-indigo-600" : "text-slate-400"} />
+                  <span className="text-slate-600">Precisión GPS y Geocerca</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="font-mono text-slate-500">Prec: {detectedGPS} | Dist: {detectedDistance}</span>
-                  {(zeroTouchProgress === 'DETECTING' || zeroTouchProgress === 'WI_FI_OK') && zeroTouchProgress !== 'IDLE' && <RefreshCw size={12} className="animate-spin text-slate-400" />}
-                  {(zeroTouchProgress === 'GPS_OK' || zeroTouchProgress === 'BIOMETRIC_PROMPT' || zeroTouchProgress === 'SUCCESS') && <CheckCircle size={14} className="text-emerald-500" />}
+                  {['DETECTING', 'WI_FI_OK'].includes(zeroTouchProgress) && <RefreshCw size={12} className="animate-spin text-slate-400" />}
+                  {['GPS_OK', 'BIOMETRIC_PROMPT', 'SUCCESS'].includes(zeroTouchProgress) && <CheckCircle size={14} className="text-emerald-500" />}
+                  {zeroTouchProgress === 'ERROR_GPS' && <X size={14} className="text-rose-500 font-extrabold" />}
                 </div>
               </div>
 
               {/* Check 3 */}
               <div className="flex items-center justify-between p-2 bg-white rounded border relative overflow-hidden">
                 <div className="flex items-center gap-2">
-                  <ShieldCheck size={14} className={zeroTouchProgress === 'BIOMETRIC_PROMPT' || zeroTouchProgress === 'SUCCESS' ? "text-indigo-600" : "text-slate-400"} />
-                  <span className="text-slate-600">Autenticación Biométrica Local (FaceID)</span>
+                  <ShieldCheck size={14} className={['BIOMETRIC_PROMPT', 'SUCCESS'].includes(zeroTouchProgress) ? "text-indigo-600" : "text-slate-400"} />
+                  <span className="text-slate-600">Firma Biométrica (FaceID local)</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-[10px] text-slate-400 font-bold uppercase">HUELLA ENCLAVE SEGURO</span>
+                  <span className="text-[10px] text-slate-400 font-bold uppercase">Keystore Secure</span>
                   {zeroTouchProgress === 'BIOMETRIC_PROMPT' && <RefreshCw size={12} className="animate-spin text-indigo-500" />}
                   {zeroTouchProgress === 'SUCCESS' && <CheckCircle size={14} className="text-emerald-500" />}
                 </div>
@@ -306,22 +432,41 @@ export default function DigitalClockIn({ onAddAuditLog, onClockInStaff }) {
                 {zeroTouchProgress === 'BIOMETRIC_PROMPT' && (
                   <div className="absolute inset-0 bg-indigo-600/90 backdrop-blur-xs flex items-center justify-center text-white gap-2 font-bold animate-in fade-in duration-200">
                     <Smartphone size={16} className="animate-bounce" />
-                    <span>Lanzando FaceID local en dispositivo...</span>
+                    <span>Lanzando FaceID local...</span>
                   </div>
                 )}
               </div>
             </div>
 
-            <div className="min-h-[48px] border-2 border-dashed rounded-lg flex items-center justify-center text-center p-3 text-xs bg-white text-slate-400 font-bold uppercase tracking-wider">
+            {/* Diagnóstico Amigable de Errores (Heurística 9: Reconocer y recuperar errores) */}
+            <div className={`min-h-[48px] border-2 border-dashed rounded-lg flex items-center justify-center text-center p-3 text-xs bg-white ${
+              zeroTouchProgress === 'ERROR_WIFI' 
+                ? 'border-rose-300 text-rose-700 bg-rose-50/20' 
+                : zeroTouchProgress === 'ERROR_GPS' 
+                  ? 'border-rose-300 text-rose-700 bg-rose-50/20'
+                  : 'text-slate-400 font-bold uppercase tracking-wider'
+            }`}>
               {zeroTouchProgress === 'IDLE' && 'Listo para activar evaluación'}
               {zeroTouchProgress === 'DETECTING' && 'Buscando señales BSSID corporativas...'}
               {zeroTouchProgress === 'WI_FI_OK' && 'Coincidencia de BSSID exitosa. Analizando precisión GPS...'}
               {zeroTouchProgress === 'GPS_OK' && 'Coordenadas GPS confirmadas en rango. Solicitando firma biométrica local...'}
               {zeroTouchProgress === 'BIOMETRIC_PROMPT' && 'Verificando rostro de empleado vía API local...'}
               {zeroTouchProgress === 'SUCCESS' && (
-                <span className="text-emerald-700 font-bold flex items-center gap-1">
-                  <CheckCircle size={16} /> Verificado: ¡María Gómez registró su asistencia correctamente!
+                <span className="text-emerald-700 font-bold flex items-center gap-1 animate-pulse">
+                  <CheckCircle size={16} /> Verificado: ¡María Gómez registró su asistencia!
                 </span>
+              )}
+              {zeroTouchProgress === 'ERROR_WIFI' && (
+                <div className="space-y-1 text-left w-full font-semibold">
+                  <span className="font-bold text-rose-800 block text-xs">⚠️ Fallo: Red Wi-Fi No Autorizada</span>
+                  <span>El dispositivo está conectado a una red residencial o externa. Conéctese a la red Wi-Fi de la empresa ("Krono-Corp") para poder registrar su entrada.</span>
+                </div>
+              )}
+              {zeroTouchProgress === 'ERROR_GPS' && (
+                <div className="space-y-1 text-left w-full font-semibold">
+                  <span className="font-bold text-rose-800 block text-xs">⚠️ Fallo: Fuera del Rango de Geocerca (40m)</span>
+                  <span>Su distancia estimada es superior a 140 metros de las balizas de entrada. Acérquese al edificio o puerta principal de oficina para registrar entrada.</span>
+                </div>
               )}
             </div>
           </div>
@@ -331,6 +476,123 @@ export default function DigitalClockIn({ onAddAuditLog, onClockInStaff }) {
             <p className="leading-relaxed">
               <span className="font-bold text-slate-700">Privacidad Asegurada:</span> KRONO interactúa directamente con Apple Secure Enclave y la API Android Keystore. El escaneo biométrico ocurre localmente en el móvil; los patrones físicos jamás se suben a la nube.
             </p>
+          </div>
+        </div>
+
+        {/* VECTOR C: MARCAJE MANUAL DE EMERGENCIA (Heurística 7: Flexibilidad y Eficiencia de uso) */}
+        <div className="bg-white p-6 rounded-xl border border-slate-200/80 shadow-sm space-y-6 lg:col-span-2">
+          <div className="space-y-1 border-b border-slate-100 pb-3">
+            <span className="text-[10px] bg-slate-100 border border-slate-200 text-slate-700 px-2.5 py-0.5 rounded-full font-bold uppercase">
+              Vector de Respaldo / Contingencia
+            </span>
+            <h3 className="text-base font-bold text-slate-800">Marcaje Manual de Emergencia</h3>
+            <p className="text-xs text-slate-400">
+              ¿Sin smartphone, batería o cobertura? El colaborador puede registrar su entrada ingresando su PIN temporal OTP proporcionado por el supervisor.
+            </p>
+          </div>
+
+          <form onSubmit={handleManualClockIn} className="grid grid-cols-1 md:grid-cols-3 gap-6 items-end">
+            <div className="space-y-1.5">
+              <label htmlFor="staff-select" className="text-xs font-bold text-slate-700">Seleccionar Colaborador</label>
+              <select
+                id="staff-select"
+                value={selectedStaff}
+                onChange={(e) => { setSelectedStaff(e.target.value); setManualResult(null); }}
+                className="w-full p-2.5 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-slate-700 font-semibold"
+              >
+                {["Juan Pérez", "María Gómez", "Carlos Díaz", "Lucía Fernández", "Roberto Méndez", "Camila Silva", "Alejandro Ruiz"].map(name => (
+                  <option key={name} value={name}>{name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="space-y-1.5">
+              <div className="flex justify-between items-center">
+                <label htmlFor="manual-pin" className="text-xs font-bold text-slate-700">PIN Temporal de Asistencia</label>
+                <span className="text-[9px] text-indigo-600 font-bold">Pista: ingresa 1234 o 9999</span>
+              </div>
+              <div className="relative">
+                <input
+                  id="manual-pin"
+                  type={showPin ? "text" : "password"}
+                  placeholder="PIN OTP de 4 dígitos"
+                  maxLength={4}
+                  value={manualPin}
+                  onChange={(e) => { setManualPin(e.target.value.replace(/\D/g, '')); setManualResult(null); }}
+                  className="w-full p-2.5 border border-slate-200 rounded-lg text-xs font-mono font-bold tracking-widest text-slate-700 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPin(!showPin)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                >
+                  {showPin ? <EyeOff size={14} /> : <Eye size={14} />}
+                </button>
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              className="py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-lg text-xs shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer h-fit"
+            >
+              <CheckCircle size={14} /> Autorizar y Registrar Entrada
+            </button>
+          </form>
+
+          {/* Feedback de resultado (Heurística 9) */}
+          {manualResult && (
+            <div className={`p-3.5 rounded-xl border flex items-start gap-2.5 text-xs font-semibold ${
+              manualResult.success 
+                ? 'bg-emerald-50 border-emerald-100 text-emerald-800' 
+                : 'bg-rose-50 border-rose-100 text-rose-700'
+            }`}>
+              {manualResult.success ? <CheckCircle size={16} className="text-emerald-600 shrink-0 mt-0.5" /> : <AlertTriangle size={16} className="text-rose-600 shrink-0 mt-0.5" />}
+              <span>{manualResult.message}</span>
+            </div>
+          )}
+        </div>
+
+        {/* ACORDEÓN DE AYUDA Y DOCUMENTACIÓN (Heurística 10: Ayuda y Documentación) */}
+        <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-5 lg:col-span-2 space-y-4">
+          <div className="flex items-center gap-2 pb-2 border-b border-slate-200">
+            <HelpCircle size={16} className="text-indigo-600" />
+            <h4 className="font-bold text-slate-800 text-xs uppercase tracking-wider">Centro de Asistencia: Preguntas Frecuentes</h4>
+          </div>
+
+          <div className="space-y-2">
+            {[
+              {
+                q: "¿Qué es el skew del temporizador y por qué importa?",
+                a: "El skew representa el desfase temporal entre el reloj del dispositivo móvil del empleado y el servidor central de Krono. Para prevenir suplantaciones y ciberataques de repetición, la puerta tolera un desfase máximo de ±3.0 segundos antes de invalidar el marcaje."
+              },
+              {
+                q: "¿Cómo funciona la validación anti-ghosting del Vector Zero-Touch?",
+                a: "El agente de Krono verifica ambientalmente (Wi-Fi local de oficina y geocerca) que el colaborador se encuentre físicamente dentro del radio autorizado (40 metros). Al confirmarse, requiere un check biométrico rápido en su móvil para evitar el registro remoto fraudulento."
+              },
+              {
+                q: "¿Qué hago si la geolocalización o el lector QR fallan?",
+                a: "En entornos de contingencia (sin señal o con fallas físicas), puedes recurrir al 'Marcaje Manual de Emergencia' ingresando su PIN temporal OTP en la consola del supervisor de accesos."
+              }
+            ].map((faq, i) => {
+              const isOpen = activeFaq === i;
+              return (
+                <div key={i} className="bg-white border border-slate-200 rounded-lg overflow-hidden transition-all shadow-2xs">
+                  <button
+                    type="button"
+                    onClick={() => setActiveFaq(isOpen ? null : i)}
+                    className="w-full p-3 text-left font-bold text-slate-700 text-xs flex justify-between items-center hover:bg-slate-50 cursor-pointer"
+                  >
+                    <span>{faq.q}</span>
+                    <span className="text-slate-400 font-mono text-[10px]">{isOpen ? '[-] Ocultar' : '[+] Leer'}</span>
+                  </button>
+                  {isOpen && (
+                    <div className="p-3.5 border-t border-slate-100 text-xs text-slate-600 leading-relaxed font-semibold bg-slate-50/20">
+                      {faq.a}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
 

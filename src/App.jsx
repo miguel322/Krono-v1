@@ -342,6 +342,14 @@ export default function App() {
     setRooms(prev => prev.map(r => r.id === id ? updatedRoom : r));
   };
 
+  const handleAddRoom = (newRoom) => {
+    setRooms(prev => [...prev, newRoom]);
+  };
+
+  const handleDeleteRoom = (id) => {
+    setRooms(prev => prev.filter(r => r.id !== id));
+  };
+
   const handleClockInStaff = (name, method) => {
     setEmployees(prev => prev.map(emp => {
       if (emp.name === name) {
@@ -679,6 +687,8 @@ export default function App() {
             <MeetingRooms 
               roomsState={rooms}
               onUpdateRoom={handleUpdateRoom}
+              onAddRoom={handleAddRoom}
+              onDeleteRoom={handleDeleteRoom}
               onAddAuditLog={handleAddAuditLog}
             />
           )}
