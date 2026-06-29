@@ -1930,7 +1930,13 @@ export default function ShiftsCalendars({
                           <span className="font-bold text-slate-800 block">
                             {asg.target === 'ALL_EMPLOYEES' ? 'Todos los empleados' : asg.target}
                           </span>
-                          <span className="text-[9px] text-slate-400 block font-medium">{asg.mode}</span>
+                          <span className="text-[9px] text-slate-400 block font-bold uppercase">
+                            {asg.target === 'ALL_EMPLOYEES' 
+                              ? 'EMPLEADOS' 
+                              : asg.mode === 'DEPARTAMENTO' 
+                                ? 'DEPARTAMENTO' 
+                                : (roster[asg.target]?.department || 'EMPLEADO')}
+                          </span>
                         </td>
                         <td className="py-2.5 px-4">
                           <span className="font-mono font-bold text-indigo-600 block">{asg.shiftCode ? asg.shiftCode : cycle?.name.split(' ')[0] || '—'}</span>
