@@ -39,7 +39,17 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
   // Estado Centralizado
-  const [employees, setEmployees] = useState(initialEmployees);
+  const [employees, setEmployees] = useState(() =>
+    initialEmployees.map((emp, i) => ({
+      ...emp,
+      branch: i % 3 === 0 ? 'Corporativo Central' : i % 3 === 1 ? 'Planta Industrial Norte' : 'Centro de Distribución Occidente'
+    }))
+  );
+  const [branches, setBranches] = useState([
+    { id: 'SC-01', name: 'Corporativo Central', address: 'Av. Reforma 402, Ciudad de México', timezone: 'GMT-6 (CDMX)', ipRange: '192.168.1.1/24', manager: 'Laura González', employeesCount: 4 },
+    { id: 'SC-02', name: 'Planta Industrial Norte', address: 'Parque Industrial Milimex, Monterrey', timezone: 'GMT-6 (CDMX)', ipRange: '10.0.1.1/24', manager: 'Roberto Méndez', employeesCount: 2 },
+    { id: 'SC-03', name: 'Centro de Distribución Occidente', address: 'Anillo Periférico Sur 8100, Guadalajara', timezone: 'GMT-6 (CDMX)', ipRange: '172.16.0.1/24', manager: 'Alejandro Ruiz', employeesCount: 1 }
+  ]);
   const [incidents, setIncidents] = useState(initialIncidents);
   const [shifts, setShifts] = useState(initialShifts);
   const [requests, setRequests] = useState(initialRequests);
@@ -350,6 +360,14 @@ export default function App() {
     setRooms(prev => prev.filter(r => r.id !== id));
   };
 
+  const handleAddBranch = (newBranch) => {
+    setBranches(prev => [...prev, newBranch]);
+  };
+
+  const handleDeleteBranch = (id) => {
+    setBranches(prev => prev.filter(b => b.id !== id));
+  };
+
   const handleClockInStaff = (name, method) => {
     setEmployees(prev => prev.map(emp => {
       if (emp.name === name) {
@@ -603,8 +621,11 @@ export default function App() {
             <Organization 
               employees={employees}
               departments={departments}
+              branches={branches}
               onAddEmployee={handleAddEmployee}
               onAddDepartment={handleAddDepartment}
+              onAddBranch={handleAddBranch}
+              onDeleteBranch={handleDeleteBranch}
               onAddAuditLog={handleAddAuditLog}
             />
           )}

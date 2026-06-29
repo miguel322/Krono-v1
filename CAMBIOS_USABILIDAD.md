@@ -50,3 +50,21 @@ Este documento resume los cambios realizados en el frontend de Krono para cumpli
     *   **Implementación**: Feedback de diagnóstico detallado y amigable si fallan las balizas (ej. *"SSID de Wi-Fi no corporativa, conéctese a la red 'Krono-Corp'"*).
 *   **Heurística 10: Ayuda y Documentación**
     *   **Implementación**: Acordeón desplegable de Preguntas Frecuentes (FAQ) al final de la página que explica conceptos como el *skew* del token de seguridad y el perímetro de la geocerca.
+
+---
+
+## 4. Módulo: Estructura Organizacional y Gestión Multisucursal (ZKTeco Style)
+
+*   **Heurística 1: Visibilidad del Estado del Sistema**
+    *   **Implementación**: Sub-navegación de la estructura organizativa en la cabecera mostrando dinámicamente los contadores de Colaboradores, Departamentos y Sucursales en línea.
+*   **Heurística 3: Libertad y Control del Usuario**
+    *   **Implementación**: Cada sucursal dispone de un botón de eliminación rápida con diálogo modal de confirmación interactivo que previene borrados accidentales y permite cancelar sin consecuencias.
+*   **Heurística 5: Prevención de Errores**
+    *   **Implementación**: El formulario de creación de sucursales valida en tiempo real la duplicidad de nombres y bloquea el envío si el campo requerido del nombre está vacío.
+*   **Heurística 6: Reconocimiento antes que Recuerdo**
+    *   **Implementación**: Botones de presets rápidos para pre-rellenar sucursales típicas (Oficina Corporativa, Planta Industrial y Centro de Distribución), incluyendo zonas horarias CIDR estándar y gestores locales.
+*   **Heurística 7: Flexibilidad y Eficiencia de Uso**
+    *   **Implementación**: Directorio de colaboradores ampliado con filtros combinados interactivos (filtrar de forma conjunta por Sucursal y Departamento) permitiendo encontrar personal de forma eficiente en empresas multi-locación.
+*   **Heurística 10: Ayuda y Documentación**
+    *   **Implementación**: Panel lateral educativo de ayuda multisucursal detallando el uso de zonas horarias para la reconciliación y filtros de IPs CIDR en marcajes móviles.
+
