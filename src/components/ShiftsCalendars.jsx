@@ -111,7 +111,7 @@ const codeForDay = (asg, cycles, dsIdxAbs, dateObj) => {
 // ── Motor de construcción del Roster (puro, determinista) ───────────────────
 const buildRoster = (employees, assignments, cycles, rosterDays, overrides) => {
   const r = {};
-  employees.forEach(({ name, department }) => {
+  employees.forEach(({ name, department, branch }) => {
     const shifts = rosterDays.map((d, i) => {
       const ds = fmtDate(d);
       const asg = resolveAssignment(name, department, ds, assignments);
@@ -123,6 +123,7 @@ const buildRoster = (employees, assignments, cycles, rosterDays, overrides) => {
     const permAsg = resolveAssignment(name, department, fmtDate(rosterDays[0]), assignments);
     r[name] = {
       department,
+      branch: branch || 'Corporativo Central',
       cycleId: permAsg && !permAsg.shiftCode ? permAsg.cycleId : null,
       shifts
     };
@@ -195,7 +196,8 @@ export default function ShiftsCalendars({
   manualOverrides,
   setManualOverrides,
   periodOverrides,
-  setPeriodOverrides
+  setPeriodOverrides,
+  branches
 }) {
   const [subTab, setSubTab] = useState('ROSTER'); // ROSTER, HORARIOS, CICLOS, ASIGNADOR
 
@@ -330,6 +332,7 @@ export default function ShiftsCalendars({
   // ── Filtros del Roster ──
   const [searchTerm, setSearchTerm] = useState('');
   const [filterDept, setFilterDept] = useState('ALL');
+  const [filterBranch, setFilterBranch] = useState('ALL');
   const [filterUnassigned, setFilterUnassigned] = useState(false);
   const [activeCell, setActiveCell] = useState(null);
 
@@ -337,8 +340,9 @@ export default function ShiftsCalendars({
     const emp = roster[empName];
     const matchesSearch = empName.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesDept = filterDept === 'ALL' || emp.department === filterDept;
+    const matchesBranch = filterBranch === 'ALL' || emp.branch === filterBranch;
     const matchesUnassigned = !filterUnassigned || emp.shifts.includes('SIN_ASIGNAR');
-    return matchesSearch && matchesDept && matchesUnassigned;
+    return matchesSearch && matchesDept && matchesBranch && matchesUnassigned;
   });
 
   // ════════════════ MOTOR DE AUTOPROGRAMACIÓN (real) ════════════════
@@ -977,12 +981,23 @@ export default function ShiftsCalendars({
                   className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-slate-700 font-semibold"
                 />
               </div>
+              {branches && branches.length > 1 && (
+                <select
+                  value={filterBranch} onChange={(e) => setFilterBranch(e.target.value)}
+                  className="px-3 py-2 border border-slate-200 rounded-lg text-xs text-slate-600 font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                >
+                  <option value="ALL">Todas las Sucursales</option>
+                  {branches.map((b) => (<option key={b.id} value={b.name}>{b.name}</option>))}
+                </select>
+              )}
               <select
                 value={filterDept} onChange={(e) => setFilterDept(e.target.value)}
                 className="px-3 py-2 border border-slate-200 rounded-lg text-xs text-slate-600 font-semibold focus:outline-none focus:ring-2"
               >
                 <option value="ALL">Todos los Departamentos</option>
-                {departments.map((d) => (<option key={d} value={d}>{d}</option>))}
+                {departments.map((d) => (
+                  <option key={d.name || d} value={d.name || d}>{d.name || d}</option>
+                ))}
               </select>
               <label className="flex items-center gap-2 text-xs font-bold cursor-pointer select-none border border-slate-200 px-3 py-2 rounded-lg bg-slate-50/50 hover:bg-slate-50">
                 <input type="checkbox" checked={filterUnassigned} onChange={(e) => setFilterUnassigned(e.target.checked)} className="rounded text-indigo-600" />
@@ -1593,7 +1608,9 @@ export default function ShiftsCalendars({
                   <label className="block text-slate-500">Destinatario</label>
                   {asgMode === 'DEPARTAMENTO' ? (
                     <select value={asgTarget} onChange={(e) => setAsgTarget(e.target.value)} className="w-full px-2.5 py-2 border rounded-lg focus:ring-1">
-                      {departments.map((d) => (<option key={d} value={d}>{d}</option>))}
+                      {departments.map((d) => (
+                        <option key={d.name || d} value={d.name || d}>{d.name || d}</option>
+                      ))}
                     </select>
                   ) : (
                     <select value={asgTarget} onChange={(e) => setAsgTarget(e.target.value)} className="w-full px-2.5 py-2 border rounded-lg focus:ring-1">

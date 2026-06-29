@@ -9,10 +9,12 @@ export default function LiveAttendance({
   onAdjustPunch, 
   onApproveException,
   onAddAuditLog,
-  getExpectedShift
+  getExpectedShift,
+  branches
 }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
+  const [filterBranch, setFilterBranch] = useState('ALL');
   const [selectedEmployee, setSelectedEmployee] = useState(null);
   
   // Estado del Formulario de Edición
@@ -25,9 +27,9 @@ export default function LiveAttendance({
   const filteredEmployees = employees.filter(emp => {
     const matchesSearch = emp.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
                           emp.department.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    if (statusFilter === 'ALL') return matchesSearch;
-    return matchesSearch && emp.status === statusFilter;
+    const matchesStatus = statusFilter === 'ALL' || emp.status === statusFilter;
+    const matchesBranch = filterBranch === 'ALL' || emp.branch === filterBranch;
+    return matchesSearch && matchesStatus && matchesBranch;
   });
 
   const getStatusBadge = (status) => {
@@ -96,19 +98,34 @@ export default function LiveAttendance({
       </div>
 
       {/* Barra de Filtros */}
-      <div className="flex flex-col sm:flex-row gap-4 bg-white p-4 rounded-xl border border-slate-200/80 shadow-sm justify-between items-center">
-        <div className="relative w-full sm:max-w-xs">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-          <input
-            type="text"
-            placeholder="Buscar por empleado, área..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-slate-700 font-semibold"
-          />
+      <div className="flex flex-col lg:flex-row gap-4 bg-white p-4 rounded-xl border border-slate-200/80 shadow-sm justify-between items-center">
+        <div className="flex flex-col sm:flex-row gap-2 w-full lg:w-auto">
+          <div className="relative w-full sm:w-64">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+            <input
+              type="text"
+              placeholder="Buscar por empleado, área..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-slate-700 font-semibold animate-in"
+            />
+          </div>
+
+          {branches && branches.length > 1 && (
+            <select
+              value={filterBranch}
+              onChange={(e) => setFilterBranch(e.target.value)}
+              className="px-3 py-2 border border-slate-200 rounded-lg text-xs text-slate-600 font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/20 bg-white"
+            >
+              <option value="ALL">Todas las Sucursales</option>
+              {branches.map(b => (
+                <option key={b.id} value={b.name}>{b.name}</option>
+              ))}
+            </select>
+          )}
         </div>
         
-        <div className="flex flex-wrap gap-2 w-full sm:w-auto justify-end">
+        <div className="flex flex-wrap gap-2 w-full lg:w-auto justify-end">
           {[
             { label: 'Todo el Personal', val: 'ALL' },
             { label: 'Presentes', val: 'PRESENTE' },
@@ -177,7 +194,14 @@ export default function LiveAttendance({
 
                     {/* Departamento */}
                     <td className="py-4 px-6 text-slate-700">
-                      {emp.department}
+                      <div>
+                        <span>{emp.department}</span>
+                        {branches && branches.length > 1 && (
+                          <span className="text-[10px] text-indigo-600 font-bold block mt-0.5 flex items-center gap-0.5">
+                            <MapPin size={9} /> {emp.branch}
+                          </span>
+                        )}
+                      </div>
                     </td>
 
                     {/* Turno */}

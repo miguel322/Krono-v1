@@ -40,10 +40,11 @@ const HISTORICAL_ATTENDANCE = [
 
 const CRYPTO_KEY = 'SHA-256: 8f3c7d2b1a9e...KRONO-SECURE-AUDIT';
 
-export default function Reports({ employees, departments, onAddAuditLog }) {
+export default function Reports({ employees, departments, onAddAuditLog, branches }) {
   // Configuración de Filtros
   const [reportType, setReportType] = useState('ASISTENCIA_DIARIA'); // ASISTENCIA_DIARIA, TARDANZAS_SALIDAS, AUSENCIAS, HORAS_EXTRAS, CONSOLIDADO
   const [selectedDept, setSelectedDept] = useState('ALL');
+  const [selectedBranch, setSelectedBranch] = useState('ALL');
   const [selectedEmp, setSelectedEmp] = useState('ALL');
   const [startDate, setStartDate] = useState('2026-06-25');
   const [endDate, setEndDate] = useState('2026-06-27');
@@ -52,11 +53,14 @@ export default function Reports({ employees, departments, onAddAuditLog }) {
   const [downloading, setDownloading] = useState(null); // 'excel' o 'pdf' o null
   const [successToast, setSuccessToast] = useState(null);
 
-  // Filtrado de empleados en base al departamento seleccionado
+  // Filtrado de empleados en base a la sucursal y departamento seleccionados
   const filteredEmployeesList = useMemo(() => {
-    if (selectedDept === 'ALL') return employees;
-    return employees.filter(e => e.department === selectedDept);
-  }, [employees, selectedDept]);
+    return employees.filter(e => {
+      const matchesDept = selectedDept === 'ALL' || e.department === selectedDept;
+      const matchesBranch = selectedBranch === 'ALL' || e.branch === selectedBranch;
+      return matchesDept && matchesBranch;
+    });
+  }, [employees, selectedDept, selectedBranch]);
 
   // Dataset filtrado final
   const reportDataset = useMemo(() => {
@@ -64,6 +68,12 @@ export default function Reports({ employees, departments, onAddAuditLog }) {
       const matchDate = item.date >= startDate && item.date <= endDate;
       const matchDept = selectedDept === 'ALL' || item.dept === selectedDept;
       const matchEmp = selectedEmp === 'ALL' || item.name === selectedEmp;
+      
+      let matchBranch = true;
+      if (selectedBranch !== 'ALL') {
+        const emp = employees.find(e => e.name === item.name);
+        matchBranch = emp && emp.branch === selectedBranch;
+      }
       
       let matchType = true;
       if (reportType === 'TARDANZAS_SALIDAS') {
@@ -74,9 +84,9 @@ export default function Reports({ employees, departments, onAddAuditLog }) {
         matchType = item.otHours > 0 || item.status === 'FERIADO_TRABAJADO';
       }
 
-      return matchDate && matchDept && matchEmp && matchType;
+      return matchDate && matchDept && matchEmp && matchBranch && matchType;
     });
-  }, [reportType, selectedDept, selectedEmp, startDate, endDate]);
+  }, [reportType, selectedDept, selectedEmp, selectedBranch, startDate, endDate, employees]);
 
   // Cálculo de KPIs rápidos en base a los datos filtrados
   const stats = useMemo(() => {
@@ -249,11 +259,12 @@ export default function Reports({ employees, departments, onAddAuditLog }) {
           <span>Filtros Avanzados de Consulta</span>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3 text-xs font-semibold text-slate-600">
+        <div className={`grid grid-cols-1 sm:grid-cols-2 md:grid-cols-${branches && branches.length > 1 ? '6' : '5'} gap-3 text-xs font-semibold text-slate-600`}>
           {/* Tipo de Reporte */}
           <div className="space-y-1">
-            <label className="block text-slate-400 text-[10px] uppercase font-bold tracking-wider">Tipo de Reporte</label>
+            <label htmlFor="report-type" className="block text-slate-400 text-[10px] uppercase font-bold tracking-wider">Tipo de Reporte</label>
             <select 
+              id="report-type"
               value={reportType} 
               onChange={(e) => { setReportType(e.target.value); setSelectedEmp('ALL'); }}
               className="w-full px-2.5 py-2 border rounded-lg focus:ring-1 focus:ring-indigo-500 focus:outline-none"
@@ -266,17 +277,36 @@ export default function Reports({ employees, departments, onAddAuditLog }) {
             </select>
           </div>
 
+          {/* Sucursal (Multisucursal mode) */}
+          {branches && branches.length > 1 && (
+            <div className="space-y-1">
+              <label htmlFor="report-branch" className="block text-slate-400 text-[10px] uppercase font-bold tracking-wider">Sucursal</label>
+              <select 
+                id="report-branch"
+                value={selectedBranch} 
+                onChange={(e) => { setSelectedBranch(e.target.value); setSelectedDept('ALL'); setSelectedEmp('ALL'); }}
+                className="w-full px-2.5 py-2 border rounded-lg focus:ring-1 focus:ring-indigo-500 focus:outline-none font-bold text-indigo-700 bg-white"
+              >
+                <option value="ALL">Todas las Sucursales</option>
+                {branches.map((b) => (
+                  <option key={b.id} value={b.name}>{b.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
           {/* Departamento */}
           <div className="space-y-1">
-            <label className="block text-slate-400 text-[10px] uppercase font-bold tracking-wider">Departamento</label>
+            <label htmlFor="report-dept" className="block text-slate-400 text-[10px] uppercase font-bold tracking-wider">Departamento</label>
             <select 
+              id="report-dept"
               value={selectedDept} 
               onChange={(e) => { setSelectedDept(e.target.value); setSelectedEmp('ALL'); }}
               className="w-full px-2.5 py-2 border rounded-lg focus:ring-1 focus:ring-indigo-500 focus:outline-none"
             >
               <option value="ALL">Todos los Departamentos</option>
               {departments.map((d) => (
-                <option key={d} value={d}>{d}</option>
+                <option key={d.name || d} value={d.name || d}>{d.name || d}</option>
               ))}
             </select>
           </div>

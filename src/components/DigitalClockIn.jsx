@@ -4,7 +4,7 @@ import {
   MapPin, ShieldCheck, Play, HelpCircle, X, Eye, EyeOff, AlertTriangle
 } from 'lucide-react';
 
-export default function DigitalClockIn({ onAddAuditLog, onClockInStaff }) {
+export default function DigitalClockIn({ onAddAuditLog, onClockInStaff, employees, branches }) {
   // Estados de TOTP QR Code
   const [seconds, setSeconds] = useState(15);
   const [qrToken, setQrToken] = useState('0xbf829a28cd9f3b92ec84013ba8123ef');
@@ -36,8 +36,13 @@ export default function DigitalClockIn({ onAddAuditLog, onClockInStaff }) {
   // FAQs desplegables (Heurística 10)
   const [activeFaq, setActiveFaq] = useState(null);
 
+  // Buscamos la sucursal del empleado seleccionado
+  const currentEmp = employees ? employees.find(e => e.name === selectedStaff) || employees[0] : null;
+  const currentBranchName = currentEmp ? currentEmp.branch : 'Corporativo Central';
+  const currentBranch = branches ? branches.find(b => b.name === currentBranchName) || { name: 'Corporativo Central', address: 'Av. Reforma 402, CDMX', ipRange: '192.168.1.1/24' } : { name: 'Corporativo Central', address: 'Av. Reforma 402, CDMX', ipRange: '192.168.1.1/24' };
+
   // Constantes de Reglas
-  const allowedBSSID = '00:1A:2B:3C:4D:5E';
+  const allowedBSSID = currentBranch.ipRange;
   const maxGpsAccuracy = 15; // metros
   const allowedRadius = 40; // metros
 
@@ -129,7 +134,7 @@ export default function DigitalClockIn({ onAddAuditLog, onClockInStaff }) {
           // Paso 4: Final exitoso
           const t4 = setTimeout(() => {
             setZeroTouchProgress('SUCCESS');
-            const targetName = "María Gómez";
+            const targetName = selectedStaff;
             onClockInStaff(targetName, "Presencia Zero-Touch");
             onAddAuditLog(
               targetName, 
@@ -137,7 +142,7 @@ export default function DigitalClockIn({ onAddAuditLog, onClockInStaff }) {
               'ZERO_TOUCH_GATEWAY', 
               'AUSENTE', 
               'PRESENTE', 
-              'Presencia ambiental Zero-Touch verificada. Firma FaceID local validada en Enclave Seguro.'
+              `Presencia ambiental Zero-Touch verificada para sucursal ${currentBranchName}. Firma FaceID local validada en Enclave Seguro.`
             );
           }, 2000);
           timeoutsRef.current.push(t4);
@@ -453,19 +458,19 @@ export default function DigitalClockIn({ onAddAuditLog, onClockInStaff }) {
               {zeroTouchProgress === 'BIOMETRIC_PROMPT' && 'Verificando rostro de empleado vía API local...'}
               {zeroTouchProgress === 'SUCCESS' && (
                 <span className="text-emerald-700 font-bold flex items-center gap-1 animate-pulse">
-                  <CheckCircle size={16} /> Verificado: ¡María Gómez registró su asistencia!
+                  <CheckCircle size={16} /> Verificado: ¡{selectedStaff} registró su asistencia!
                 </span>
               )}
               {zeroTouchProgress === 'ERROR_WIFI' && (
                 <div className="space-y-1 text-left w-full font-semibold">
                   <span className="font-bold text-rose-800 block text-xs">⚠️ Fallo: Red Wi-Fi No Autorizada</span>
-                  <span>El dispositivo está conectado a una red residencial o externa. Conéctese a la red Wi-Fi de la empresa ("Krono-Corp") para poder registrar su entrada.</span>
+                  <span>El dispositivo está conectado a una red residencial o externa. Conéctese a la red Wi-Fi autorizada para <strong>{currentBranch.name}</strong> (Red: <code>{currentBranch.ipRange}</code>) para poder registrar su entrada.</span>
                 </div>
               )}
               {zeroTouchProgress === 'ERROR_GPS' && (
                 <div className="space-y-1 text-left w-full font-semibold">
-                  <span className="font-bold text-rose-800 block text-xs">⚠️ Fallo: Fuera del Rango de Geocerca (40m)</span>
-                  <span>Su distancia estimada es superior a 140 metros de las balizas de entrada. Acérquese al edificio o puerta principal de oficina para registrar entrada.</span>
+                  <span className="font-bold text-rose-800 block text-xs">⚠️ Fallo: Fuera de la Geocerca</span>
+                  <span>Su distancia estimada es superior al radio de 40m permitido para la sucursal <strong>{currentBranch.name}</strong>. Acérquese a <code>{currentBranch.address}</code> para poder realizar el fichaje.</span>
                 </div>
               )}
             </div>

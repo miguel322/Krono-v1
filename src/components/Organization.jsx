@@ -25,7 +25,7 @@ export default function Organization({
   // Formulario Empleado
   const [empName, setEmpName] = useState('');
   const [empRole, setEmpRole] = useState('');
-  const [empDept, setEmpDept] = useState(departments[0] || 'Operaciones');
+  const [empDept, setEmpDept] = useState(departments[0]?.name || 'Operaciones');
   const [empBranch, setEmpBranch] = useState(branches[0]?.name || 'Corporativo Central');
   const [empShift, setEmpShift] = useState('Turno Diurno (08:00 - 17:00)');
   const [empEmail, setEmpEmail] = useState('');
@@ -35,6 +35,7 @@ export default function Organization({
   const [deptName, setDeptName] = useState('');
   const [deptSupervisor, setDeptSupervisor] = useState('');
   const [deptCostCenter, setDeptCostCenter] = useState('');
+  const [deptBranch, setDeptBranch] = useState(branches[0]?.name || 'Corporativo Central');
 
   // Formulario Sucursal (Multi-branch)
   const [branchName, setBranchName] = useState('');
@@ -47,6 +48,7 @@ export default function Organization({
   // Modales
   const [showCreateBranchModal, setShowCreateBranchModal] = useState(false);
   const [showDeleteBranchConfirm, setShowDeleteBranchConfirm] = useState(null);
+  const [selectedBranchDetail, setSelectedBranchDetail] = useState(null);
 
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
@@ -114,18 +116,24 @@ export default function Organization({
     e.preventDefault();
     if (!deptName) return;
 
-    onAddDepartment(deptName);
+    const newDept = {
+      name: deptName,
+      branch: deptBranch,
+      supervisor: deptSupervisor || 'Sin Asignar',
+      costCenter: deptCostCenter || `CC-89${deptName.length}`
+    };
+
+    onAddDepartment(newDept);
     onAddAuditLog(
       'Admin de Organización', 
       'CREAR_DEPARTAMENTO', 
       deptName.toUpperCase().replace(' ', '_'), 
       'VACIO', 
       deptName, 
-      `Creado nuevo departamento organizacional: ${deptName} bajo supervisor ${deptSupervisor || 'No asignado'}.`
+      `Creado nuevo departamento organizacional: ${deptName} en sucursal ${deptBranch} bajo supervisor ${deptSupervisor || 'No asignado'}.`
     );
 
     triggerToast(`¡Departamento de ${deptName} registrado!`);
-    setEmpDept(deptName);
     setDeptName('');
     setDeptSupervisor('');
     setDeptCostCenter('');
@@ -170,7 +178,6 @@ export default function Organization({
       return;
     }
 
-    // Prevención de Errores (Heurística 5)
     const exists = branches.some(b => b.name.toLowerCase() === branchName.toLowerCase());
     if (exists) {
       setBranchError('Ya existe una sucursal con este nombre.');
@@ -316,25 +323,27 @@ export default function Organization({
               </div>
               
               <div className="flex gap-2 w-full md:w-auto">
-                <select
-                  value={filterBranch}
-                  onChange={(e) => setFilterBranch(e.target.value)}
-                  className="px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs text-slate-600 font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-                >
-                  <option value="ALL">Todas las Sucursales</option>
-                  {branches.map(b => (
-                    <option key={b.id} value={b.name}>{b.name}</option>
-                  ))}
-                </select>
+                {branches && branches.length > 1 && (
+                  <select
+                    value={filterBranch}
+                    onChange={(e) => setFilterBranch(e.target.value)}
+                    className="px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs text-slate-600 font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500/20 bg-white"
+                  >
+                    <option value="ALL">Todas las Sucursales</option>
+                    {branches.map(b => (
+                      <option key={b.id} value={b.name}>{b.name}</option>
+                    ))}
+                  </select>
+                )}
 
                 <select
                   value={filterDept}
                   onChange={(e) => setFilterDept(e.target.value)}
-                  className="px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs text-slate-600 font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                  className="px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs text-slate-600 font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500/20 bg-white"
                 >
                   <option value="ALL">Todas las Áreas</option>
                   {departments.map(d => (
-                    <option key={d} value={d}>{d}</option>
+                    <option key={d.name || d} value={d.name || d}>{d.name || d}</option>
                   ))}
                 </select>
               </div>
@@ -348,7 +357,7 @@ export default function Organization({
                 </div>
               ) : (
                 filteredEmployees.map((emp) => (
-                  <div key={emp.id} className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-sm flex gap-4 hover:border-slate-300 transition-all">
+                  <div key={emp.id} className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-sm flex gap-4 hover:border-slate-300 transition-all animate-in fade-in">
                     <img
                       src={emp.avatar}
                       alt={emp.name}
@@ -365,9 +374,11 @@ export default function Organization({
                         <span className="bg-slate-100 border text-slate-600 px-2 py-0.5 rounded text-[10px]" title="Área / Departamento">
                           {emp.department}
                         </span>
-                        <span className="bg-indigo-50/50 border border-indigo-100 text-indigo-700 px-2 py-0.5 rounded text-[10px] flex items-center gap-1 font-bold" title="Sucursal">
-                          <MapPin size={9} /> {emp.branch}
-                        </span>
+                        {branches && branches.length > 1 && (
+                          <span className="bg-indigo-50/50 border border-indigo-100 text-indigo-700 px-2 py-0.5 rounded text-[10px] flex items-center gap-1 font-bold" title="Sucursal">
+                            <MapPin size={9} /> {emp.branch}
+                          </span>
+                        )}
                         <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
                           emp.status === 'PRESENTE' || emp.status === 'TARDE'
                             ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
@@ -397,7 +408,7 @@ export default function Organization({
                   id="emp-name"
                   type="text" required placeholder="Ej. Juan Miller" value={empName}
                   onChange={(e) => setEmpName(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-250 rounded-lg focus:ring-1 focus:ring-indigo-500"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-1 focus:ring-indigo-500"
                 />
               </div>
 
@@ -407,7 +418,7 @@ export default function Organization({
                   id="emp-role"
                   type="text" required placeholder="Ej. Analista Senior Contabilidad" value={empRole}
                   onChange={(e) => setEmpRole(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-250 rounded-lg focus:ring-1"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-1"
                 />
               </div>
 
@@ -421,7 +432,7 @@ export default function Organization({
                     className="w-full px-2.5 py-2 border rounded-lg focus:ring-1 text-slate-700"
                   >
                     {departments.map((d) => (
-                      <option key={d} value={d}>{d}</option>
+                      <option key={d.name || d} value={d.name || d}>{d.name || d}</option>
                     ))}
                   </select>
                 </div>
@@ -431,8 +442,9 @@ export default function Organization({
                   <select
                     id="emp-branch-select"
                     value={empBranch}
+                    disabled={!branches || branches.length <= 1}
                     onChange={(e) => setEmpBranch(e.target.value)}
-                    className="w-full px-2.5 py-2 border rounded-lg focus:ring-1 text-slate-700 font-bold"
+                    className="w-full px-2.5 py-2 border rounded-lg focus:ring-1 text-slate-700 font-bold disabled:bg-slate-50 disabled:text-slate-400"
                   >
                     {branches.map((b) => (
                       <option key={b.id} value={b.name}>{b.name}</option>
@@ -462,7 +474,7 @@ export default function Organization({
                     id="emp-email"
                     type="email" placeholder="correo@empresa.com" value={empEmail}
                     onChange={(e) => setEmpEmail(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-250 rounded-lg focus:ring-1"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-1"
                   />
                 </div>
               </div>
@@ -473,7 +485,7 @@ export default function Organization({
                   id="emp-avatar"
                   type="text" placeholder="https://images.unsplash.com/..." value={empAvatar}
                   onChange={(e) => setEmpAvatar(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-250 rounded-lg focus:ring-1"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-1"
                 />
               </div>
 
@@ -496,30 +508,35 @@ export default function Organization({
           {/* Listado de Departamentos */}
           <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[550px] overflow-y-auto pr-1">
             {departments.map((dept) => (
-              <div key={dept} className="bg-white p-5 rounded-xl border border-slate-200/80 shadow-sm flex flex-col justify-between space-y-4 hover:border-slate-300 transition-colors">
+              <div key={dept.name} className="bg-white p-5 rounded-xl border border-slate-200/80 shadow-sm flex flex-col justify-between space-y-4 hover:border-slate-300 transition-colors animate-in fade-in">
                 <div className="space-y-2">
                   <div className="flex justify-between items-start">
                     <h3 className="font-bold text-slate-800 text-sm flex items-center gap-1.5">
                       <Building2 size={16} className="text-indigo-500" />
-                      {dept}
+                      {dept.name}
                     </h3>
-                    <span className="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full font-bold">
-                      CC-89{dept.length}
+                    <span className="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full font-bold font-mono">
+                      {dept.costCenter}
                     </span>
                   </div>
                   <p className="text-xs text-slate-400 font-medium">
                     Centro de costo y planeación cuadrante vinculado a las nóminas del sector.
                   </p>
+                  {branches && branches.length > 1 && (
+                    <span className="text-[10px] bg-indigo-50 border border-indigo-100 text-indigo-700 px-2 py-0.5 rounded font-bold mt-1 inline-block flex items-center gap-0.5 w-fit">
+                      <MapPin size={9} /> {dept.branch}
+                    </span>
+                  )}
                 </div>
 
                 <div className="flex justify-between items-center pt-3 border-t border-slate-100 text-xs font-semibold">
                   <div>
                     <span className="text-slate-400 block text-[9px] mb-0.5 font-bold uppercase">Personal Activo</span>
-                    <span className="text-slate-800 font-bold text-sm font-mono">{getDeptCount(dept)} personas</span>
+                    <span className="text-slate-800 font-bold text-sm font-mono">{getDeptCount(dept.name)} personas</span>
                   </div>
                   <div>
                     <span className="text-slate-400 block text-[9px] mb-0.5 font-bold uppercase">Supervisor Asignado</span>
-                    <span className="text-slate-700 font-bold">Líder {dept.split(' ')[0]}</span>
+                    <span className="text-slate-700 font-bold">{dept.supervisor}</span>
                   </div>
                 </div>
               </div>
@@ -543,6 +560,22 @@ export default function Organization({
                   className="w-full px-3 py-2 border rounded-lg focus:ring-1 focus:ring-indigo-500"
                 />
               </div>
+
+              {branches && branches.length > 1 && (
+                <div className="space-y-1">
+                  <label htmlFor="dept-branch" className="block text-slate-500">Sucursal Ubicación *</label>
+                  <select
+                    id="dept-branch"
+                    value={deptBranch}
+                    onChange={(e) => setDeptBranch(e.target.value)}
+                    className="w-full px-2.5 py-2 border rounded-lg focus:ring-1 text-slate-700 font-bold"
+                  >
+                    {branches.map((b) => (
+                      <option key={b.id} value={b.name}>{b.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               <div className="space-y-1">
                 <label htmlFor="dept-supervisor" className="block text-slate-500">Supervisor / Responsable</label>
@@ -596,12 +629,13 @@ export default function Organization({
               {branches.map((branch) => (
                 <div 
                   key={branch.id} 
-                  className="bg-white p-5 rounded-xl border border-slate-200/80 shadow-sm flex flex-col justify-between space-y-4 hover:border-indigo-200 hover:shadow-md transition-all relative group"
+                  onClick={() => setSelectedBranchDetail(branch)}
+                  className="bg-white p-5 rounded-xl border border-slate-200/80 shadow-sm flex flex-col justify-between space-y-4 hover:border-indigo-500 hover:shadow-md hover:scale-[1.01] cursor-pointer transition-all relative group"
                 >
                   <div className="space-y-1.5">
                     <div className="flex justify-between items-start pr-6">
                       <h3 className="font-bold text-slate-800 text-sm flex items-center gap-1.5">
-                        <MapPin size={15} className="text-indigo-500" />
+                        <MapPin size={15} className="text-indigo-500 animate-pulse" />
                         {branch.name}
                       </h3>
                       <span className="text-[9px] font-mono bg-slate-100 text-slate-400 px-1.5 py-0.5 rounded border border-slate-200 font-bold uppercase shrink-0">
@@ -638,7 +672,7 @@ export default function Organization({
 
                   {/* Botón Eliminar (Heurística 3: Libertad del usuario) */}
                   <button
-                    onClick={() => setShowDeleteBranchConfirm(branch)}
+                    onClick={(e) => { e.stopPropagation(); setShowDeleteBranchConfirm(branch); }}
                     className="absolute top-4 right-4 p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all opacity-0 group-hover:opacity-100 focus:opacity-100"
                     title="Eliminar esta sucursal"
                   >
@@ -658,8 +692,119 @@ export default function Organization({
             <p>
               <strong>Filtros de Red IP:</strong> Los rangos CIDR configurados limitan los marcajes web móviles, validando que el colaborador esté conectado exclusivamente a la red de sucursal antes de autorizar el fichaje.
             </p>
+            <p className="bg-indigo-50/50 p-2.5 rounded-lg border border-indigo-150 text-indigo-700 text-[11px] leading-normal font-bold">
+              💡 <strong>Tip de Usabilidad:</strong> Haz clic en cualquier tarjeta de sucursal para ingresar y auditar sus departamentos asignados y la nómina de colaboradores adscritos.
+            </p>
           </div>
 
+        </div>
+      )}
+
+      {/* ═══════════════ MODAL · DETALLES DE SUCURSAL (ZKTeco drill-down, H1 & H7) ═══════════════ */}
+      {selectedBranchDetail && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-2xl rounded-2xl border border-slate-200 shadow-2xl p-6 space-y-5 animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center pb-3 border-b border-slate-100">
+              <h3 className="text-sm font-bold text-slate-900 flex items-center gap-1.5">
+                <MapPin size={16} className="text-indigo-600 animate-bounce" /> Detalles de Sucursal: {selectedBranchDetail.name}
+              </h3>
+              <button 
+                type="button" 
+                onClick={() => setSelectedBranchDetail(null)}
+                className="p-1 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-600 transition-all cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Información General */}
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 space-y-2">
+                <h4 className="font-bold text-slate-800 text-xs uppercase tracking-wider pb-1.5 border-b">Ficha Técnica</h4>
+                <div>Dirección: <span className="text-slate-700 font-bold">{selectedBranchDetail.address}</span></div>
+                <div>Gerente Local: <span className="text-slate-700 font-bold">{selectedBranchDetail.manager}</span></div>
+                <div>Zona Horaria: <span className="text-slate-700 font-bold">{selectedBranchDetail.timezone}</span></div>
+                <div>Filtro IP CIDR: <code className="text-indigo-600 font-mono font-bold bg-white px-1 py-0.5 rounded border">{selectedBranchDetail.ipRange}</code></div>
+              </div>
+
+              {/* Terminales Biométricas Simuladas */}
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 space-y-2">
+                <h4 className="font-bold text-slate-800 text-xs uppercase tracking-wider pb-1.5 border-b">Dispositivos Biométricos ZKTeco</h4>
+                <div className="space-y-1.5 font-bold">
+                  <div className="flex items-center justify-between bg-white px-2.5 py-1 rounded border">
+                    <span className="flex items-center gap-1"><Wifi size={12} className="text-emerald-500" /> ZK-Face 01 (Entrada)</span>
+                    <span className="text-[9px] text-emerald-600 bg-emerald-50 border border-emerald-100 px-1 py-0.5 rounded">ONLINE</span>
+                  </div>
+                  <div className="flex items-center justify-between bg-white px-2.5 py-1 rounded border">
+                    <span className="flex items-center gap-1"><Wifi size={12} className="text-emerald-500" /> ZK-Finger 02 (Salida)</span>
+                    <span className="text-[9px] text-emerald-600 bg-emerald-50 border border-emerald-100 px-1 py-0.5 rounded">ONLINE</span>
+                  </div>
+                  <div className="flex items-center justify-between bg-white px-2.5 py-1 rounded border opacity-60">
+                    <span className="flex items-center gap-1"><Wifi size={12} className="text-slate-400" /> ZK-QR 03 (Mesa)</span>
+                    <span className="text-[9px] text-slate-500 bg-slate-100 border px-1 py-0.5 rounded">OFFLINE</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Departamentos Pertenecientes (Drill-down) */}
+              <div className="bg-white p-4 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 space-y-3 col-span-1 md:col-span-2">
+                <h4 className="font-bold text-slate-800 text-xs uppercase tracking-wider pb-1.5 border-b flex items-center justify-between">
+                  <span>Áreas / Departamentos Asociados</span>
+                  <span className="bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-full text-[10px]">
+                    {departments.filter(d => d.branch === selectedBranchDetail.name).length} departamentos
+                  </span>
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {departments.filter(d => d.branch === selectedBranchDetail.name).map(d => (
+                    <div key={d.name} className="flex justify-between items-center bg-slate-50 px-3 py-2 rounded-lg border border-slate-100">
+                      <div>
+                        <span className="font-bold text-slate-800 text-xs block">{d.name}</span>
+                        <span className="text-[10px] text-slate-400">CC: {d.costCenter}</span>
+                      </div>
+                      <span className="text-[10px] text-slate-500 font-mono">{getDeptCount(d.name)} pers.</span>
+                    </div>
+                  ))}
+                  {departments.filter(d => d.branch === selectedBranchDetail.name).length === 0 && (
+                    <span className="text-slate-400 italic">No hay departamentos asignados a esta sucursal.</span>
+                  )}
+                </div>
+              </div>
+
+              {/* Colaboradores Asignados */}
+              <div className="bg-white p-4 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 space-y-3 col-span-1 md:col-span-2">
+                <h4 className="font-bold text-slate-800 text-xs uppercase tracking-wider pb-1.5 border-b flex items-center justify-between">
+                  <span>Colaboradores Adscritos</span>
+                  <span className="bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-full text-[10px]">
+                    {employees.filter(e => e.branch === selectedBranchDetail.name).length} colaboradores
+                  </span>
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-48 overflow-y-auto pr-1">
+                  {employees.filter(e => e.branch === selectedBranchDetail.name).map(e => (
+                    <div key={e.id} className="flex items-center gap-2.5 bg-slate-50 p-2 rounded-lg border border-slate-100">
+                      <img src={e.avatar} alt={e.name} className="w-8 h-8 rounded-full object-cover border" />
+                      <div>
+                        <span className="font-bold text-slate-800 block text-xs">{e.name}</span>
+                        <span className="text-[10px] text-slate-400 font-medium">{e.role} &bull; {e.department}</span>
+                      </div>
+                    </div>
+                  ))}
+                  {employees.filter(e => e.branch === selectedBranchDetail.name).length === 0 && (
+                    <span className="text-slate-400 italic">No hay personal asignado a esta sucursal.</span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setSelectedBranchDetail(null)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-xs font-bold transition-all cursor-pointer shadow-sm animate-pulse"
+              >
+                Cerrar Detalles
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

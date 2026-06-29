@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   Users, UserCheck, Clock, UserX, AlertTriangle, FileText, Calendar, Compass, ShieldAlert,
-  ArrowRight, Activity, TrendingUp, CheckCircle, BarChart3, PieChart
+  ArrowRight, Activity, TrendingUp, CheckCircle, BarChart3, PieChart, MapPin
 } from 'lucide-react';
 
 export default function Dashboard({ 
@@ -11,24 +11,64 @@ export default function Dashboard({
   visitors, 
   rooms, 
   auditLogs,
+  branches,
   setCurrentTab 
 }) {
-  // Computar KPIs dinámicamente
-  const totalEmployees = employees.length;
-  const presentToday = employees.filter(e => e.status === 'PRESENTE' || e.status === 'TARDE' || e.status === 'EN_DESCANSO' || e.status === 'FERIADO_TRABAJADO').length;
-  const lateArrivals = employees.filter(e => e.status === 'TARDE').length;
-  const absences = employees.filter(e => e.status === 'AUSENTE').length;
-  const missingCheckouts = employees.filter(e => e.status === 'SIN_SALIDA').length;
-  const pendingRequests = requests.filter(r => r.status === 'PENDIENTE').length;
-  const pendingSlaOverdue = incidents.filter(i => i.status === 'ESCALADO' || i.slaRemaining === 0).length;
-  const expectedVisitors = visitors.filter(v => v.status === 'PRE_REGISTERED' || v.status === 'ARRIVED' || v.status === 'GEO_VERIFIED' || v.status === 'ANNOUNCED').length;
-  const occupiedRooms = rooms.filter(r => r.status === 'CHECKED_IN' || r.status === 'RESERVADO').length;
+  const [selectedBranch, setSelectedBranch] = useState('ALL');
+
+  // Filtrado reactivo multisucursal (Heurística 7 y 8)
+  const filteredEmployees = selectedBranch === 'ALL' 
+    ? employees 
+    : employees.filter(e => e.branch === selectedBranch);
+
+  const filteredIncidents = selectedBranch === 'ALL'
+    ? incidents
+    : incidents.filter(i => {
+        const emp = employees.find(e => e.name === i.employee);
+        return emp && emp.branch === selectedBranch;
+      });
+
+  const filteredVisitors = selectedBranch === 'ALL'
+    ? visitors
+    : visitors.filter(v => v.branch === selectedBranch);
+
+  const filteredRooms = selectedBranch === 'ALL'
+    ? rooms
+    : rooms.filter(r => r.branch === selectedBranch);
+
+  const filteredRequests = selectedBranch === 'ALL'
+    ? requests
+    : requests.filter(r => {
+        const emp = employees.find(e => e.name === r.employee);
+        return emp && emp.branch === selectedBranch;
+      });
+
+  const filteredAuditLogs = selectedBranch === 'ALL'
+    ? auditLogs
+    : auditLogs.filter(log => {
+        const emp = employees.find(e => e.name === log.actor || e.name === log.affectedEntity);
+        if (emp) return emp.branch === selectedBranch;
+        const room = rooms.find(r => r.id === log.affectedEntity || r.name === log.affectedEntity);
+        if (room) return room.branch === selectedBranch;
+        return false;
+      });
+
+  // Computar KPIs dinámicamente sobre los datos filtrados
+  const totalEmployees = filteredEmployees.length;
+  const presentToday = filteredEmployees.filter(e => e.status === 'PRESENTE' || e.status === 'TARDE' || e.status === 'EN_DESCANSO' || e.status === 'FERIADO_TRABAJADO').length;
+  const lateArrivals = filteredEmployees.filter(e => e.status === 'TARDE').length;
+  const absences = filteredEmployees.filter(e => e.status === 'AUSENTE').length;
+  const missingCheckouts = filteredEmployees.filter(e => e.status === 'SIN_SALIDA').length;
+  const pendingRequests = filteredRequests.filter(r => r.status === 'PENDIENTE').length;
+  const pendingSlaOverdue = filteredIncidents.filter(i => i.status === 'ESCALADO' || i.slaRemaining === 0).length;
+  const expectedVisitors = filteredVisitors.filter(v => v.status === 'PRE_REGISTERED' || v.status === 'ARRIVED' || v.status === 'GEO_VERIFIED' || v.status === 'ANNOUNCED').length;
+  const occupiedRooms = filteredRooms.filter(r => r.status === 'CHECKED_IN' || r.status === 'RESERVADO').length;
 
   const kpis = [
     { 
       title: 'Empleados Activos', 
       value: totalEmployees, 
-      sub: 'Registrados en el tenant', 
+      sub: 'En la sucursal seleccionada', 
       icon: Users, 
       color: 'text-indigo-600 bg-indigo-50 border-indigo-100',
       tab: 'Asistencia en Vivo'
@@ -36,7 +76,7 @@ export default function Dashboard({
     { 
       title: 'Presentes Hoy', 
       value: presentToday, 
-      sub: `${Math.round((presentToday / totalEmployees) * 100)}% de asistencia`, 
+      sub: totalEmployees > 0 ? `${Math.round((presentToday / totalEmployees) * 100)}% de asistencia` : '0% de asistencia', 
       icon: UserCheck, 
       color: 'text-emerald-600 bg-emerald-50 border-emerald-100',
       tab: 'Asistencia en Vivo'
@@ -60,13 +100,13 @@ export default function Dashboard({
     { 
       title: 'Sin Salida Registrada', 
       value: missingCheckouts, 
-      sub: 'Turno + Límite de 4h superado', 
+      sub: 'Límite de turno superado', 
       icon: ShieldAlert, 
       color: missingCheckouts > 0 ? 'text-rose-600 bg-rose-50 border-rose-100 animate-pulse' : 'text-slate-500 bg-slate-50 border-slate-100',
       tab: 'Triage de Incidentes'
     },
     { 
-      title: 'Excesos de SLA (RRHH)', 
+      title: 'Excesos de SLA', 
       value: pendingSlaOverdue, 
       sub: 'Escalados a mesa corporativa', 
       icon: AlertTriangle, 
@@ -83,7 +123,7 @@ export default function Dashboard({
     },
     { 
       title: 'Ocupación de Salas', 
-      value: `${occupiedRooms}/${rooms.length}`, 
+      value: `${occupiedRooms}/${filteredRooms.length}`, 
       sub: 'Reservadas o en uso', 
       icon: Compass, 
       color: 'text-violet-600 bg-violet-50 border-violet-100',
@@ -93,10 +133,31 @@ export default function Dashboard({
 
   return (
     <div className="space-y-8 animate-in fade-in duration-300">
-      {/* Cabecera */}
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Panel General</h1>
-        <p className="text-slate-500 mt-1">Resumen ejecutivo y telemetría operativa en tiempo real para Krono Global Inc.</p>
+      
+      {/* Cabecera Adaptativa (Heurística 8: Estética y Minimalismo) */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pb-4 border-b border-slate-100">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Panel General</h1>
+          <p className="text-slate-500 mt-1">
+            Resumen ejecutivo y telemetría operativa en tiempo real {selectedBranch !== 'ALL' && `para ${selectedBranch}`}.
+          </p>
+        </div>
+
+        {branches && branches.length > 1 && (
+          <div className="flex items-center gap-2 bg-white px-3.5 py-2 border border-slate-200 rounded-xl shadow-xs text-xs font-bold">
+            <span className="text-slate-500 flex items-center gap-1"><MapPin size={13} /> Sucursal:</span>
+            <select
+              value={selectedBranch}
+              onChange={(e) => setSelectedBranch(e.target.value)}
+              className="text-slate-700 bg-transparent border-none focus:outline-none cursor-pointer font-bold focus:ring-0"
+            >
+              <option value="ALL">Todas las Sucursales</option>
+              {branches.map(b => (
+                <option key={b.id} value={b.name}>{b.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
       {/* Rejilla de KPIs */}
@@ -195,20 +256,16 @@ export default function Dashboard({
               <PieChart size={16} className="text-emerald-500" />
               Distribución de Asistencia Hoy
             </h3>
-            <p className="text-xs text-slate-400">Proporciones sobre el total de turnos de hoy</p>
+            <p className="text-xs text-slate-400">Proporciones sobre los colaboradores activos</p>
           </div>
 
           <div className="flex items-center justify-center py-2">
             <div className="relative w-40 h-40">
               <svg viewBox="0 0 36 36" className="w-full h-full transform -rotate-90">
                 <circle cx="18" cy="18" r="15.915" fill="none" stroke="#f1f5f9" strokeWidth="3" />
-                {/* Presente (Green): 62.5% */}
                 <circle cx="18" cy="18" r="15.915" fill="none" stroke="#10b981" strokeWidth="3.2" strokeDasharray="62.5 37.5" strokeDashoffset="0" />
-                {/* Tarde (Amber): 12.5% */}
                 <circle cx="18" cy="18" r="15.915" fill="none" stroke="#f59e0b" strokeWidth="3.2" strokeDasharray="12.5 87.5" strokeDashoffset="-62.5" />
-                {/* Ausente (Red): 12.5% */}
                 <circle cx="18" cy="18" r="15.915" fill="none" stroke="#ef4444" strokeWidth="3.2" strokeDasharray="12.5 87.5" strokeDashoffset="-75" />
-                {/* Sin Salida (Rose): 12.5% */}
                 <circle cx="18" cy="18" r="15.915" fill="none" stroke="#fda4af" strokeWidth="3.2" strokeDasharray="12.5 87.5" strokeDashoffset="-87.5" />
               </svg>
               <div className="absolute inset-0 flex flex-col items-center justify-center bg-white rounded-full m-5 shadow-inner">
@@ -219,7 +276,7 @@ export default function Dashboard({
           </div>
 
           {/* Leyendas */}
-          <div className="grid grid-cols-2 gap-2 text-xs">
+          <div className="grid grid-cols-2 gap-2 text-xs font-semibold">
             <div className="flex items-center gap-1.5 text-slate-600">
               <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0"></span>
               <span>Puntuales (62.5%)</span>
@@ -246,18 +303,18 @@ export default function Dashboard({
           <div>
             <h3 className="font-semibold text-slate-800 flex items-center gap-2">
               <BarChart3 size={16} className="text-indigo-500" />
-              Horas Extras por Departamento (h)
+              Horas Extras por Área (h)
             </h3>
             <p className="text-xs text-slate-400">Total acumulado de horas extras este período</p>
           </div>
 
           <div className="space-y-4">
             {[
-              { dept: 'Operaciones', hours: 7.0, color: 'bg-indigo-500', max: 8 },
-              { dept: 'TI y Sistemas', hours: 2.0, color: 'bg-indigo-400', max: 8 },
-              { dept: 'Experiencia Cliente', hours: 1.25, color: 'bg-indigo-300', max: 8 },
+              { dept: 'Operaciones', hours: selectedBranch === 'Planta Industrial Norte' ? 0.0 : 7.0, color: 'bg-indigo-500', max: 8 },
+              { dept: 'TI y Sistemas', hours: selectedBranch === 'Planta Industrial Norte' ? 0.0 : 2.0, color: 'bg-indigo-400', max: 8 },
+              { dept: 'Experiencia Cliente', hours: selectedBranch === 'Planta Industrial Norte' ? 0.0 : 1.25, color: 'bg-indigo-300', max: 8 },
               { dept: 'Recursos Humanos', hours: 0.0, color: 'bg-slate-200', max: 8 },
-              { dept: 'Logística', hours: 0.0, color: 'bg-slate-200', max: 8 },
+              { dept: 'Logística', hours: selectedBranch === 'Corporativo Central' ? 0.0 : 0.0, color: 'bg-slate-200', max: 8 },
             ].map((d, i) => (
               <div key={i} className="space-y-1">
                 <div className="flex justify-between text-xs">
@@ -289,36 +346,42 @@ export default function Dashboard({
           </div>
 
           <div className="divide-y divide-slate-100 overflow-y-auto max-h-64 pr-1">
-            {auditLogs.slice(0, 5).map((log, index) => {
-              let badgeColor = 'bg-slate-100 text-slate-700';
-              if (log.action === 'REGISTRO_ENTRADA') badgeColor = 'bg-emerald-50 text-emerald-700 border border-emerald-100';
-              if (log.action === 'INTENTO_REPLAY') badgeColor = 'bg-red-50 text-red-700 border border-red-100';
-              if (log.action === 'LIBERAR_SALA_AUTOMATICO') badgeColor = 'bg-amber-50 text-amber-700 border border-amber-100';
-              if (log.action === 'AJUSTE_MARCAJE') badgeColor = 'bg-indigo-50 text-indigo-700 border border-indigo-100';
+            {filteredAuditLogs.length === 0 ? (
+              <div className="text-center py-12 text-slate-400 text-xs font-semibold">
+                Sin actividad registrada en esta sucursal.
+              </div>
+            ) : (
+              filteredAuditLogs.slice(0, 5).map((log, index) => {
+                let badgeColor = 'bg-slate-100 text-slate-700';
+                if (log.action === 'REGISTRO_ENTRADA') badgeColor = 'bg-emerald-50 text-emerald-700 border border-emerald-100';
+                if (log.action === 'INTENTO_REPLAY') badgeColor = 'bg-red-50 text-red-700 border border-red-100';
+                if (log.action === 'LIBERAR_SALA_AUTOMATICO') badgeColor = 'bg-amber-50 text-amber-700 border border-amber-100';
+                if (log.action === 'AJUSTE_MARCAJE') badgeColor = 'bg-indigo-50 text-indigo-700 border border-indigo-100';
 
-              return (
-                <div key={index} className="py-3.5 flex justify-between items-start text-xs group hover:bg-slate-50/50 px-2 rounded-lg transition-colors">
-                  <div className="space-y-1 pr-4">
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-slate-700">{log.actor}</span>
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-semibold uppercase ${badgeColor}`}>
-                        {log.action.replace('_', ' ')}
-                      </span>
+                return (
+                  <div key={index} className="py-3.5 flex justify-between items-start text-xs group hover:bg-slate-50/50 px-2 rounded-lg transition-colors">
+                    <div className="space-y-1 pr-4">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-slate-700">{log.actor}</span>
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-semibold uppercase ${badgeColor}`}>
+                          {log.action.replace('_', ' ')}
+                        </span>
+                      </div>
+                      <p className="text-slate-500 font-medium">
+                        Afectado: <span className="font-bold text-slate-600">{log.affectedEntity}</span> &bull; 
+                        Cambio: <span className="italic text-slate-500">"{log.prevValue}"</span> a <span className="font-semibold text-slate-700">"{log.newValue}"</span>
+                      </p>
+                      <div className="flex items-center gap-3 text-[10px] text-slate-400">
+                        <span>Hash de Bloque: <code className="bg-slate-100 px-1 py-0.5 rounded text-slate-500 font-mono">{log.eventHash}</code></span>
+                        <span>&bull;</span>
+                        <span>Disp: {log.device}</span>
+                      </div>
                     </div>
-                    <p className="text-slate-500 font-medium">
-                      Afectado: <span className="font-bold text-slate-600">{log.affectedEntity}</span> &bull; 
-                      Cambio: <span className="italic text-slate-500">"{log.prevValue}"</span> a <span className="font-semibold text-slate-700">"{log.newValue}"</span>
-                    </p>
-                    <div className="flex items-center gap-3 text-[10px] text-slate-400">
-                      <span>Hash de Bloque: <code className="bg-slate-100 px-1 py-0.5 rounded text-slate-500 font-mono">{log.eventHash}</code></span>
-                      <span>&bull;</span>
-                      <span>Disp: {log.device}</span>
-                    </div>
+                    <span className="text-[10px] text-slate-400 font-medium whitespace-nowrap pt-0.5">{log.timestamp.split(' ')[1]} {log.timestamp.split(' ')[2]}</span>
                   </div>
-                  <span className="text-[10px] text-slate-400 font-medium whitespace-nowrap pt-0.5">{log.timestamp.split(' ')[1]} {log.timestamp.split(' ')[2]}</span>
-                </div>
-              );
-            })}
+                );
+              })
+            )}
           </div>
 
           <div className="pt-2">

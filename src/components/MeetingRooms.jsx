@@ -3,10 +3,11 @@ import {
   Compass, Users, X, Clock, Play, Calendar, Trash2, ShieldAlert, Plus, Search, Info, AlertTriangle
 } from 'lucide-react';
 
-export default function MeetingRooms({ roomsState, onUpdateRoom, onAddRoom, onDeleteRoom, onAddAuditLog }) {
+export default function MeetingRooms({ roomsState, onUpdateRoom, onAddRoom, onDeleteRoom, onAddAuditLog, branches }) {
   // Búsqueda y filtrado
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL'); // ALL, AVAILABLE, RESERVED, CHECKED_IN, RELEASED
+  const [filterBranch, setFilterBranch] = useState('ALL');
   
   // Modals y formularios
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -16,6 +17,7 @@ export default function MeetingRooms({ roomsState, onUpdateRoom, onAddRoom, onDe
   // Campos del formulario
   const [newName, setNewName] = useState('');
   const [newCapacity, setNewCapacity] = useState(6);
+  const [newBranch, setNewBranch] = useState(branches ? branches[0]?.name || 'Corporativo Central' : 'Corporativo Central');
   const [newQrCode, setNewQrCode] = useState('');
   const [newStatus, setNewStatus] = useState('AVAILABLE');
   const [newReservation, setNewReservation] = useState('Disponible');
@@ -157,6 +159,7 @@ export default function MeetingRooms({ roomsState, onUpdateRoom, onAddRoom, onDe
       name: newName,
       capacity: Number(newCapacity),
       status: newStatus,
+      branch: newBranch,
       nextReservation: newStatus === 'AVAILABLE' ? 'AVAILABLE' : newReservation,
       organizer: newStatus === 'AVAILABLE' ? '--' : newOrganizer,
       slaTimer: newStatus === 'RESERVED' ? 15 : 0,
@@ -202,8 +205,12 @@ export default function MeetingRooms({ roomsState, onUpdateRoom, onAddRoom, onDe
     setShowDeleteConfirm(null);
   };
 
-  // Filtrado de salas
-  const filteredRooms = roomsState.filter(room => {
+  // Filtrado de salas por sucursal
+  const roomsInBranch = filterBranch === 'ALL'
+    ? roomsState
+    : roomsState.filter(r => r.branch === filterBranch);
+
+  const filteredRooms = roomsInBranch.filter(room => {
     const matchesSearch = room.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
                           room.qrCode.toLowerCase().includes(searchTerm.toLowerCase());
     
@@ -216,11 +223,11 @@ export default function MeetingRooms({ roomsState, onUpdateRoom, onAddRoom, onDe
   });
 
   // KPIs dinámicos para Visibilidad del Estado (Heurística 1)
-  const totalCount = roomsState.length;
-  const availableCount = roomsState.filter(r => r.status === 'AVAILABLE' || r.status === 'DISPONIBLE').length;
-  const reservedCount = roomsState.filter(r => r.status === 'RESERVED').length;
-  const checkedInCount = roomsState.filter(r => r.status === 'CHECKED_IN').length;
-  const releasedCount = roomsState.filter(r => r.status === 'RELEASED_BY_NO_SHOW').length;
+  const totalCount = roomsInBranch.length;
+  const availableCount = roomsInBranch.filter(r => r.status === 'AVAILABLE' || r.status === 'DISPONIBLE').length;
+  const reservedCount = roomsInBranch.filter(r => r.status === 'RESERVED').length;
+  const checkedInCount = roomsInBranch.filter(r => r.status === 'CHECKED_IN').length;
+  const releasedCount = roomsInBranch.filter(r => r.status === 'RELEASED_BY_NO_SHOW').length;
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
@@ -265,19 +272,34 @@ export default function MeetingRooms({ roomsState, onUpdateRoom, onAddRoom, onDe
 
       {/* Controles de Búsqueda y Filtros (Heurística 7: Flexibilidad y Eficiencia) */}
       <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-sm flex flex-col md:flex-row gap-3 justify-between items-center">
-        <div className="relative w-full md:w-80">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
-          <input
-            type="text"
-            placeholder="Buscar sala por nombre o QR..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-slate-700 font-semibold"
-          />
-          {searchTerm && (
-            <button onClick={() => setSearchTerm('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
-              <X size={12} />
-            </button>
+        <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
+          <div className="relative w-full sm:w-64">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+            <input
+              type="text"
+              placeholder="Buscar sala por nombre o QR..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-slate-700 font-semibold"
+            />
+            {searchTerm && (
+              <button onClick={() => setSearchTerm('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                <X size={12} />
+              </button>
+            )}
+          </div>
+
+          {branches && branches.length > 1 && (
+            <select
+              value={filterBranch}
+              onChange={(e) => setFilterBranch(e.target.value)}
+              className="px-3 py-2 border border-slate-200 rounded-lg text-xs text-slate-600 font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/20 bg-white"
+            >
+              <option value="ALL">Todas las Sucursales</option>
+              {branches.map(b => (
+                <option key={b.id} value={b.name}>{b.name}</option>
+              ))}
+            </select>
           )}
         </div>
 
@@ -598,6 +620,22 @@ export default function MeetingRooms({ roomsState, onUpdateRoom, onAddRoom, onDe
                   required
                 />
               </div>
+
+              {branches && branches.length > 1 && (
+                <div className="space-y-1.5 col-span-2">
+                  <label htmlFor="room-branch" className="text-xs font-bold text-slate-700">Sucursal Ubicación *</label>
+                  <select
+                    id="room-branch"
+                    value={newBranch}
+                    onChange={(e) => setNewBranch(e.target.value)}
+                    className="w-full p-2.5 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-slate-700 font-bold"
+                  >
+                    {branches.map(b => (
+                      <option key={b.id} value={b.name}>{b.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               <div className="space-y-1.5">
                 <label htmlFor="room-status" className="text-xs font-bold text-slate-700">Estado Inicial</label>

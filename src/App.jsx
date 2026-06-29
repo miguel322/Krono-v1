@@ -53,17 +53,27 @@ export default function App() {
   const [incidents, setIncidents] = useState(initialIncidents);
   const [shifts, setShifts] = useState(initialShifts);
   const [requests, setRequests] = useState(initialRequests);
-  const [visitors, setVisitors] = useState(initialVisitors);
-  const [rooms, setRooms] = useState(initialRooms);
+  const [visitors, setVisitors] = useState(() =>
+    initialVisitors.map((vis, i) => ({
+      ...vis,
+      branch: i % 2 === 0 ? 'Corporativo Central' : 'Planta Industrial Norte'
+    }))
+  );
+  const [rooms, setRooms] = useState(() =>
+    initialRooms.map((room, i) => ({
+      ...room,
+      branch: i % 2 === 0 ? 'Corporativo Central' : 'Planta Industrial Norte'
+    }))
+  );
   const [auditLogs, setAuditLogs] = useState(initialAuditTrail);
   const [payroll, setPayroll] = useState(initialPayroll);
   const [settings, setSettings] = useState(initialSettings);
   const [departments, setDepartments] = useState([
-    'Operaciones', 
-    'Logística', 
-    'TI y Sistemas', 
-    'Recursos Humanos', 
-    'Experiencia del Cliente'
+    { name: 'Operaciones', branch: 'Corporativo Central', supervisor: 'Laura González', costCenter: 'CC-8901' },
+    { name: 'Logística', branch: 'Planta Industrial Norte', supervisor: 'Roberto Méndez', costCenter: 'CC-8902' },
+    { name: 'TI y Sistemas', branch: 'Corporativo Central', supervisor: 'Carlos Díaz', costCenter: 'CC-8903' },
+    { name: 'Recursos Humanos', branch: 'Corporativo Central', supervisor: 'Sofía Rodríguez', costCenter: 'CC-8904' },
+    { name: 'Experiencia del Cliente', branch: 'Centro de Distribución Occidente', supervisor: 'Alejandro Ruiz', costCenter: 'CC-8905' }
   ]);
 
   // --- Estados de Turnos y Calendarios Levantados ---
@@ -613,6 +623,7 @@ export default function App() {
               visitors={visitors}
               rooms={rooms}
               auditLogs={auditLogs}
+              branches={branches}
               setCurrentTab={setCurrentTab}
             />
           )}
@@ -637,6 +648,7 @@ export default function App() {
               onApproveException={handleApproveException}
               onAddAuditLog={handleAddAuditLog}
               getExpectedShift={getExpectedShift}
+              branches={branches}
             />
           )}
 
@@ -654,6 +666,7 @@ export default function App() {
               setManualOverrides={setManualOverrides}
               periodOverrides={periodOverrides}
               setPeriodOverrides={setPeriodOverrides}
+              branches={branches}
             />
           )}
 
@@ -661,6 +674,8 @@ export default function App() {
             <DigitalClockIn 
               onAddAuditLog={handleAddAuditLog}
               onClockInStaff={handleClockInStaff}
+              employees={employees}
+              branches={branches}
             />
           )}
 
@@ -684,6 +699,7 @@ export default function App() {
               employees={employees}
               departments={departments}
               onAddAuditLog={handleAddAuditLog}
+              branches={branches}
             />
           )}
 
@@ -711,6 +727,7 @@ export default function App() {
               onAddRoom={handleAddRoom}
               onDeleteRoom={handleDeleteRoom}
               onAddAuditLog={handleAddAuditLog}
+              branches={branches}
             />
           )}
 
