@@ -63,8 +63,12 @@ Este documento resume los cambios realizados en el frontend de Krono para cumpli
     *   **Implementación**: El formulario de creación de sucursales valida en tiempo real la duplicidad de nombres y bloquea el envío si el campo requerido del nombre está vacío.
 *   **Heurística 6: Reconocimiento antes que Recuerdo**
     *   **Implementación**: Botones de presets rápidos para pre-rellenar sucursales típicas (Oficina Corporativa, Planta Industrial y Centro de Distribución), incluyendo zonas horarias CIDR estándar y gestores locales.
-*   **Heurística 7: Flexibilidad y Eficiencia de Uso**
-    *   **Implementación**: Directorio de colaboradores ampliado con filtros combinados interactivos (filtrar de forma conjunta por Sucursal y Departamento) permitiendo encontrar personal de forma eficiente en empresas multi-locación.
+*   **Heurística 7: Flexibilidad y Eficiencia de Uso (Drill-Down e Interfaz Adaptativa)**
+    *   **Implementación**:
+        *   **Relación Jerárquica**: Los departamentos pertenecen ahora a una sucursal. En el formulario de alta de departamentos, se selecciona a qué sucursal pertenecen.
+        *   **Drill-down de Sucursal**: Al hacer clic en una tarjeta de sucursal, se abre un **Panel Detallado** que despliega la ficha técnica de la sucursal, las terminales biométricas ZKTeco instaladas, sus departamentos enlazados y todos los colaboradores adscritos.
+        *   **Filtros Combinados**: Directorio de colaboradores con filtrado conjunto por Sucursal y Departamento.
+        *   **Soporte Adaptativo en Todos los Módulos**: Si la empresa tiene solo 1 sucursal configurada, el sistema oculta todos los selectores de sucursal en el Dashboard, Asistencia en Vivo, Roster, Marcaje, Reportes y Salas de Reunión (evitando ruido visual - Heurística 8). Al agregar una segunda sucursal, el modo Multisucursal se activa globalmente de manera transparente.
 *   **Heurística 10: Ayuda y Documentación**
     *   **Implementación**: Panel lateral educativo de ayuda multisucursal detallando el uso de zonas horarias para la reconciliación y filtros de IPs CIDR en marcajes móviles.
 
