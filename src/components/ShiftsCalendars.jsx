@@ -518,8 +518,117 @@ export default function ShiftsCalendars({
         };
         
         const headers = parseLine(firstLine);
+        
+        // Detectar si es el formato de "Matriz de 10 columnas" (Excel de Gerencia, ej: Horarios 25-31 Agosto)
+        const isCustomMatrixFormat = headers.length === 10 || 
+                                     (headers[0] === '' && headers[1] === '' && headers[2] === '') ||
+                                     (headers[1] && headers[1].toLowerCase().includes('unnamed')) || 
+                                     (headers[2] && headers[2].toLowerCase().includes('unnamed'));
+        
+        if (isCustomMatrixFormat) {
+          const previewRows = [];
+          const overridesToApply = {};
+          let totalValid = 0;
+          let totalWarnings = 0;
+          let totalErrors = 0;
+          
+          // Mapear días de la semana a los índices del rosterDays actual.
+          // Fila 1 (headers) tiene las fechas (ej: "25 AGOSTO", "26 AGOSTO").
+          // Fila 2 (lines[1]) tiene los días de la semana (ej: "lunes", "martes").
+          const dayLines = parseLine(lines[1] || '');
+          const dayMappings = [];
+          
+          for (let colIdx = 3; colIdx <= 9; colIdx++) {
+            const rawDayName = dayLines[colIdx]?.toLowerCase().trim() || '';
+            const matchedIdx = rosterDays.findIndex(rd => {
+              const dayOfWeek = rd.getDay(); // 0 = Domingo, 1 = Lunes, etc.
+              const spanishDayName = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'][dayOfWeek];
+              return spanishDayName === rawDayName || (rawDayName === 'miercoles' && dayOfWeek === 3) || (rawDayName === 'sabado' && dayOfWeek === 6);
+            });
+            const dateStr = headers[colIdx] || `Día ${colIdx - 2}`;
+            dayMappings.push({ colIdx, dateStr, matchedIdx });
+          }
+          
+          let currentDepartment = 'SUPERVISORES GENERALES';
+          
+          for (let i = 2; i < lines.length; i++) {
+            const cols = parseLine(lines[i]);
+            if (cols.length === 0 || (cols.length === 1 && cols[0] === '')) continue;
+            
+            const colA = cols[0] || '';
+            const colB = cols[1] || '';
+            const colC = cols[2] || '';
+            
+            // Si Col B tiene texto pero Col A y Col C están vacías, es un separador de departamento
+            if (colB && !colC && !colA) {
+              currentDepartment = colB.trim().toUpperCase();
+              continue;
+            }
+            
+            // Si Col B y Col C tienen datos, es un empleado
+            if (colB && colC) {
+              const empName = colB.trim();
+              const empRole = colC.trim();
+              
+              // Buscar empleado en Krono
+              const emp = baseEmployees.find(e => e.name.toLowerCase().trim() === empName.toLowerCase().trim());
+              
+              const rowData = {
+                name: empName,
+                department: currentDepartment,
+                status: 'OK',
+                shiftsCount: 0,
+                warnings: [],
+                errors: []
+              };
+              
+              if (!emp) {
+                rowData.status = 'ERROR';
+                rowData.errors.push(`Colaborador "${empName}" (${empRole}) no está en Krono.`);
+                totalErrors++;
+                previewRows.push(rowData);
+                continue;
+              }
+              
+              // Procesar los 7 días de la semana
+              dayMappings.forEach(({ colIdx, matchedIdx }) => {
+                if (matchedIdx === -1) return;
+                
+                const rawVal = cols[colIdx] || '';
+                const cleanVal = rawVal.trim().toUpperCase();
+                
+                if (!cleanVal || cleanVal === 'OFF') {
+                  overridesToApply[`${emp.name}|${matchedIdx}`] = 'LIB';
+                  rowData.shiftsCount++;
+                  totalValid++;
+                } else {
+                  // Limpiar formato: "10.00 -19.30" -> "10:00-19:30"
+                  const formattedShift = cleanVal.replace(/\./g, ':').replace(/\s+/g, '');
+                  overridesToApply[`${emp.name}|${matchedIdx}`] = formattedShift;
+                  rowData.shiftsCount++;
+                  totalValid++;
+                }
+              });
+              
+              previewRows.push(rowData);
+            }
+          }
+          
+          setImportPreview({
+            rows: previewRows,
+            overridesToApply,
+            totalValid,
+            totalWarnings,
+            totalErrors,
+            fileName: file.name
+          });
+          setShowImportModal(true);
+          e.target.value = '';
+          return;
+        }
+
         if (headers.length < 2 || !headers[0].toLowerCase().includes('empleado')) {
-          setImportError('Formato inválido. La primera columna debe ser el nombre del Empleado.');
+          setImportError('Formato inválido. La primera columna debe ser el nombre del Empleado o la matriz de gerencia.');
           return;
         }
         
