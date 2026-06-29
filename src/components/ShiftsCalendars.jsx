@@ -741,6 +741,119 @@ export default function ShiftsCalendars({
     triggerSaveToast();
   };
 
+  // ── Importación de CSV y Descarga de Plantilla (Horarios Rotativos) ──
+  const [importAsgLogs, setImportAsgLogs] = useState([]);
+  const [showImportAsgLogs, setShowImportAsgLogs] = useState(false);
+
+  const handleDownloadAsgTemplate = () => {
+    // Generate CSV template contents
+    const headers = "tipo_asignacion,nombre_destinatario,id_ciclo,fecha_inicio,fecha_fin,excepcion_temporal,modo_excepcion\n";
+    // Sample rows based on real employees and cycles
+    const cycleSample = shiftCycles[0]?.id || 'CYC-ROT-01';
+    const sampleEmp = Object.keys(roster)[0] || 'Juan Pérez';
+    const row1 = `EMPLEADO,${sampleEmp},${cycleSample},2026-07-01,2026-07-31,NO,\n`;
+    const row2 = `DEPARTAMENTO,Operaciones,${cycleSample},2026-07-05,2026-07-20,SI,REEMPLAZAR\n`;
+    const csvContent = "data:text/csv;charset=utf-8," + encodeURIComponent(headers + row1 + row2);
+    
+    const link = document.createElement("a");
+    link.setAttribute("href", csvContent);
+    link.setAttribute("download", "plantilla_carga_rotacion_krono.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    onAddAuditLog(
+      'Planificador RRHH',
+      'DESCARGAR_PLANTILLA_CSV',
+      'PLANTILLA_ROTACION',
+      'N/A',
+      'DESCARGADO',
+      'Descarga de plantilla CSV para carga masiva de asignaciones realizada con éxito.'
+    );
+  };
+
+  const handleUploadAsgCSV = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target.result;
+      const lines = text.split("\n");
+      const newAsgs = [];
+      const logs = [];
+      let successCount = 0;
+
+      // Skip header line
+      for (let i = 1; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+
+        const cols = line.split(",");
+        if (cols.length < 5) {
+          logs.push(`Línea ${i + 1}: Error - Columnas insuficientes.`);
+          continue;
+        }
+
+        const [type, target, cycleId, start, end, isTemp, excMode] = cols.map(c => c?.trim());
+
+        // validations
+        if (type !== 'EMPLEADO' && type !== 'DEPARTAMENTO') {
+          logs.push(`Línea ${i + 1}: Error - tipo_asignacion debe ser EMPLEADO o DEPARTAMENTO.`);
+          continue;
+        }
+
+        const cycleExists = shiftCycles.some(c => c.id === cycleId);
+        if (!cycleExists) {
+          logs.push(`Línea ${i + 1}: Error - id_ciclo "${cycleId}" no existe en el catálogo.`);
+          continue;
+        }
+
+        if (type === 'EMPLEADO' && !Object.keys(roster).includes(target)) {
+          logs.push(`Línea ${i + 1}: Error - Colaborador "${target}" no existe.`);
+          continue;
+        }
+
+        const cleanAsg = {
+          id: `ASG-${Math.floor(5000 + Math.random() * 5000)}`,
+          mode: type,
+          target,
+          cycleId,
+          start,
+          end,
+          isTemp: isTemp === 'SI',
+          excType: excMode || 'REEMPLAZAR',
+          supersededBy: null,
+          pubMode: 'NINGUNA',
+          pubNoticeDay: 0,
+          pubLead: 1,
+          pubCadence: 'SEMANAL'
+        };
+
+        newAsgs.push(cleanAsg);
+        successCount++;
+        logs.push(`Línea ${i + 1}: Éxito - Asignación cargada para ${target}.`);
+      }
+
+      if (newAsgs.length > 0) {
+        setAssignments(prev => [...newAsgs, ...prev]);
+        onAddAuditLog(
+          'Planificador RRHH',
+          'IMPORTAR_CSV_CALENDARIOS',
+          `BATCH-${Math.floor(100 + Math.random() * 900)}`,
+          'N/A',
+          `${successCount} registros`,
+          `Se importaron exitosamente ${successCount} asignaciones de calendarios rotativos mediante archivo CSV.`
+        );
+      }
+
+      setImportAsgLogs(logs);
+      setShowImportAsgLogs(true);
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
   // ── Crear asignación / calendario (con Sobrescribir automático) ──
   const handleAddAssignment = (e) => {
     e.preventDefault();
@@ -1732,6 +1845,58 @@ export default function ShiftsCalendars({
             <div className="flex justify-between items-center pb-3 border-b border-slate-100">
               <h3 className="font-bold text-slate-800 text-sm">Calendarios y Excepciones Vigentes</h3>
               <span className="text-[10px] text-slate-400 font-semibold flex items-center gap-1"><Info size={12} /> El roster se recalcula al cambiar esta tabla</span>
+            </div>
+
+            {/* Panel de Carga Masiva (CSV / Plantilla) */}
+            <div className="bg-indigo-50/40 p-4 rounded-xl border border-indigo-150 space-y-3 text-xs font-semibold text-slate-600">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                <div>
+                  <h4 className="font-bold text-indigo-850 text-xs flex items-center gap-1.5">
+                    📥 Carga Masiva de Calendarios (Horarios Rotativos)
+                  </h4>
+                  <p className="text-[11px] text-indigo-600 mt-0.5">Descarga la plantilla estructurada, llena los datos de rotación y vuelve a subirla para poblar el roster.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleDownloadAsgTemplate}
+                  className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg text-[10px] transition-all flex items-center gap-1.5 cursor-pointer shadow-xs whitespace-nowrap"
+                >
+                  <Download size={11} /> Descargar Plantilla CSV
+                </button>
+              </div>
+
+              <div className="border border-dashed border-indigo-200 bg-white rounded-lg p-3 flex flex-col sm:flex-row items-center justify-between gap-3">
+                <span className="text-[11px] text-slate-500 font-medium">Sube tu archivo plantilla CSV completado:</span>
+                <label className="px-3.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 text-[11px] font-bold rounded-lg transition-all cursor-pointer flex items-center gap-1">
+                  <Upload size={11} /> Seleccionar Archivo
+                  <input
+                    type="file"
+                    accept=".csv"
+                    onChange={handleUploadAsgCSV}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+
+              {showImportAsgLogs && (
+                <div className="bg-slate-900 text-slate-200 p-3 rounded-lg font-mono text-[10px] space-y-1.5 max-h-32 overflow-y-auto">
+                  <div className="flex justify-between items-center text-slate-400 border-b border-slate-800 pb-1">
+                    <span>REGISTROS DE IMPORTACIÓN</span>
+                    <button 
+                      type="button" 
+                      onClick={() => setShowImportAsgLogs(false)} 
+                      className="text-slate-400 hover:text-slate-200 cursor-pointer"
+                    >
+                      <X size={10} />
+                    </button>
+                  </div>
+                  {importAsgLogs.map((log, idx) => (
+                    <div key={idx} className={log.includes("Error") ? "text-rose-500 font-bold" : "text-emerald-500 font-bold"}>
+                      {log}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
             <div className="overflow-hidden border border-slate-100 rounded-lg">
               <table className="w-full text-left border-collapse text-xs">
